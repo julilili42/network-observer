@@ -13,7 +13,10 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatTimestamp(
-  ts: HostEntry["last_seen"] | { secs_since_epoch: number; nanos_since_epoch: number } | undefined
+  ts:
+    | HostEntry["last_seen"]
+    | { secs_since_epoch: number; nanos_since_epoch: number }
+    | undefined
 ): string {
   if (!ts) return "—";
   if (typeof ts === "number") return new Date(ts).toLocaleTimeString();
@@ -30,10 +33,6 @@ export function formatEvent(ev: CapturedEvent): string {
   if (ev.Transport) {
     const t = ev.Transport;
     return `${t.protocol}  ${t.src_ip}:${t.src_port} → ${t.dst_ip}:${t.dst_port}`;
-  }
-  if (ev.Discovery) {
-    const d = ev.Discovery;
-    return `DISCOVERY ${d.operation}  ${d.name} @ ${d.ip}:${d.port}`;
   }
   return "Unknown event";
 }

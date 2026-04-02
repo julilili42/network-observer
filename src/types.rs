@@ -1,6 +1,6 @@
 use core::fmt;
 use serde::{Deserialize, Serialize};
-use std::{hash::Hash, net::Ipv4Addr, time::SystemTime};
+use std::{hash::Hash, net::Ipv4Addr};
 
 use crate::message::PeerMessage;
 
@@ -22,7 +22,6 @@ pub struct SessionStats {
 pub enum CapturedEvent {
     Transport(TransportPacket),
     Arp(ArpPacket),
-    Discovery(DiscoveryPacket),
     IncomingMessage(PeerMessage),
 }
 
@@ -51,14 +50,6 @@ impl fmt::Display for CapturedEvent {
 
                 Ok(())
             }
-            CapturedEvent::Discovery(packet) => {
-                write!(
-                    f,
-                    "DISCOVERY {:?} from {:?}: {}:{:?}",
-                    packet.operation, packet.name, packet.ip, packet.port
-                )?;
-                Ok(())
-            }
             CapturedEvent::IncomingMessage(message) => {
                 write!(
                     f,
@@ -69,20 +60,6 @@ impl fmt::Display for CapturedEvent {
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiscoveryPacket {
-    pub name: String,
-    pub ip: Ipv4Addr,
-    pub port: u16,
-    pub operation: DiscoveryOperation,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DiscoveryOperation {
-    Hello,
-    Bye,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -141,7 +118,6 @@ pub struct PeerInfo {
     pub name: String,
     pub ip: Ipv4Addr,
     pub port: u16,
-    pub last_seen: SystemTime,
 }
 
 impl PartialEq for PeerInfo {
@@ -183,22 +159,3 @@ impl fmt::Display for ScanError {
 }
 
 impl std::error::Error for ScanError {}
-
-#[derive(Debug)]
-pub enum DiscoveryError {
-    Bind(std::io::Error),
-    Broadcast,
-    Serialize,
-}
-
-impl fmt::Display for DiscoveryError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DiscoveryError::Bind(e) => write!(f, "socket bind failed: {}", e),
-            DiscoveryError::Broadcast => write!(f, "failed to enable broadcast"),
-            DiscoveryError::Serialize => write!(f, "packet serialization failed"),
-        }
-    }
-}
-
-impl std::error::Error for DiscoveryError {}

@@ -17,36 +17,25 @@ export interface ArpPacket {
   org: string | null;
 }
 
-export interface DiscoveryPacket {
-  name: string;
-  ip: string;
-  port: number;
-  operation: "Hello" | "Bye";
-}
-
 export interface PeerInfo {
   name: string;
   ip: string;
   port: number;
-  last_seen: { secs_since_epoch: number; nanos_since_epoch: number };
 }
 
 export interface PeerMessage {
   from: PeerInfo;
   content: string;
-  outgoing?: boolean;
+  outgoing: boolean;
 }
 
 export type MessagesEntry = [PeerInfo, PeerMessage[]];
-
-// Backend returns Vec<(PeerInfo, Vec<PeerMessage>)>
 export type MessageInbox = MessagesEntry[];
 
 export type CapturedEvent =
-  | { Transport: TransportPacket; Arp?: never; Discovery?: never; IncomingMessage?: never }
-  | { Arp: ArpPacket; Transport?: never; Discovery?: never; IncomingMessage?: never }
-  | { Discovery: DiscoveryPacket; Transport?: never; Arp?: never; IncomingMessage?: never }
-  | { IncomingMessage: PeerMessage; Transport?: never; Arp?: never; Discovery?: never };
+  | { Transport: TransportPacket; Arp?: never; IncomingMessage?: never }
+  | { Arp: ArpPacket; Transport?: never; IncomingMessage?: never }
+  | { IncomingMessage: PeerMessage; Transport?: never; Arp?: never };
 
 export interface HostEntry {
   ip: string;
@@ -67,7 +56,6 @@ export interface SessionStats {
 }
 
 export type SessionEntry = [SessionKey, SessionStats];
-
 export type Tab = "graph" | "packets" | "sessions" | "hosts" | "peers" | "messages";
 
 export interface Toast {

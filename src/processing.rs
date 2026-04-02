@@ -1,12 +1,9 @@
 use crate::{
     api::Store,
     message::PeerMessage,
-    types::{
-        ArpPacket, CapturedEvent, DiscoveryOperation, DiscoveryPacket, HostEntry, PeerInfo,
-        SessionKey, SessionStats, TransportPacket,
-    },
+    types::{ArpPacket, CapturedEvent, HostEntry, SessionKey, SessionStats, TransportPacket},
 };
-use std::{collections::HashMap, net::Ipv4Addr, time::SystemTime};
+use std::{collections::HashMap, net::Ipv4Addr};
 extern crate pnet;
 
 fn normalize_session(session: SessionKey) -> SessionKey {
@@ -51,10 +48,7 @@ fn accumulate_arp(arp_table: &mut HashMap<Ipv4Addr, HostEntry>, arp_packet: ArpP
 
 // do not add messages to event buffer
 fn should_buffer(event: &CapturedEvent) -> bool {
-    matches!(
-        event,
-        CapturedEvent::Transport(_) | CapturedEvent::Arp(_) | CapturedEvent::Discovery(_)
-    )
+    matches!(event, CapturedEvent::Transport(_) | CapturedEvent::Arp(_))
 }
 
 async fn buffer_event(store: &Store, event: &CapturedEvent) {
@@ -86,24 +80,9 @@ async fn handle_arp(store: &Store, packet: ArpPacket) {
     accumulate_arp(table, packet);
 }
 
-async fn handle_discovery(store: &Store, discovery: DiscoveryPacket) {
-    let mut peers = store.peers.write().await;
-    match discovery.operation {
-        DiscoveryOperation::Hello => peers.insert(
-            discovery.ip,
-            PeerInfo {
-                name: discovery.name,
-                ip: discovery.ip,
-                port: discovery.port,
-                last_seen: SystemTime::now(),
-            },
-        ),
-        DiscoveryOperation::Bye => peers.remove(&discovery.ip),
-    };
-}
-
-async fn handle_message(store: &Store, message: PeerMessage) {
+async fn handle_message(store: &Store, mut message: PeerMessage) {
     let mut messages = store.messages.write().await;
+    message.outgoing = false;
     messages
         .entry(message.from.clone())
         .or_default()
@@ -114,7 +93,6 @@ async fn handle_event(store: &Store, event: CapturedEvent) {
     match event {
         CapturedEvent::Transport(packet) => handle_transport(store, packet).await,
         CapturedEvent::Arp(packet) => handle_arp(store, packet).await,
-        CapturedEvent::Discovery(packet) => handle_discovery(store, packet).await,
         CapturedEvent::IncomingMessage(message) => handle_message(store, message).await,
     }
 }
@@ -126,14 +104,14 @@ pub fn spawn_event_processing(
 ) {
     tokio::spawn(async move {
         while let Some(event) = internal_rx.recv().await {
-            // Captured event -> Broadcast channel -> Websocket
-            let _ = external_tx.send(event.clone());
-
             // Save events
             buffer_event(&store, &event).await;
 
             // Process events
-            handle_event(&store, event).await;
+            handle_event(&store, event.clone()).await;
+
+            // Captured event -> Broadcast channel -> Websocket
+            let _ = external_tx.send(event);
         }
     });
 }

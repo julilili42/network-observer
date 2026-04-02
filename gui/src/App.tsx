@@ -22,7 +22,6 @@ import type {
   HostEntry,
   SessionEntry,
   PeerInfo,
-  PeerMessage,
   Tab,
   Toast,
   MessageInbox as MessageInboxType,
@@ -53,38 +52,23 @@ function AppInner({
   const [tab, setTab] = useState<Tab>("graph");
   const [scanning, setScanning] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const [discoveryRunning, setDiscoveryRunning] = useState(false);
 
   const [iface, setIface] = useState("eth0");
   const [filter, setFilter] = useState("");
   const [hostLimit, setHostLimit] = useState(256);
-  const [discoveryName, setDiscoveryName] = useState("MyDevice");
-  const [discoveryPort, setDiscoveryPort] = useState(serverPort);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const isSelfPeer = useCallback(
-    (peer: PeerInfo) => peer.port === serverPort,
-    [serverPort]
-  );
-
   const handleEvent = useCallback((ev: CapturedEvent) => {
     if (ev.IncomingMessage) {
       const msg = ev.IncomingMessage;
-
-      if (!isSelfPeer(msg.from)) {
-        setToasts((prev) => [
-          ...prev.slice(-4),
-          { id: ++toastCounter, from: msg.from, content: msg.content },
-        ]);
-      }
-
-      api.fetchMessages().then((m: any) => {
-        if (m) setMessages(m);
-      });
-
+      setToasts((prev) => [
+        ...prev.slice(-4),
+        { id: ++toastCounter, from: msg.from, content: msg.content },
+      ]);
+      api.fetchMessages().then((m: any) => { if (m) setMessages(m); });
       return;
     }
 
@@ -94,8 +78,8 @@ function AppInner({
 
     if (ev.Arp) {
       setHosts((prev) => {
-        const ip = ev.Arp.sender_ip;
-        const mac = ev.Arp.sender_mac;
+        const ip = ev.Arp!.sender_ip;
+        const mac = ev.Arp!.sender_mac;
         const existing = prev.find((h) => h.ip === ip);
         if (existing) {
           return prev.map((h) =>
@@ -105,24 +89,11 @@ function AppInner({
         return [...prev, { ip, mac, last_seen: Date.now() }];
       });
     }
-
-    if (ev.Discovery) {
-      const d = ev.Discovery;
-      if (d.operation === "Bye") {
-        setPeers((prev) => prev.filter((p) => p.ip !== d.ip));
-      }
-    }
-  }, [api, isSelfPeer]);
+  }, [api]);
 
   const connected = useWebSocket(wsUrl, handleEvent);
 
-  usePolling(
-    setHosts,
-    connected ? undefined : setPackets,
-    setSessions,
-    setPeers,
-    setMessages,
-  );
+  usePolling(setHosts, connected ? undefined : setPackets, setSessions, setPeers, setMessages);
 
   const ensureCapture = async (): Promise<boolean> => {
     if (capturing) return true;
@@ -145,10 +116,7 @@ function AppInner({
     }
   };
 
-  const onStopScan = async () => {
-    await api.stopScan();
-    setScanning(false);
-  };
+  const onStopScan = async () => { await api.stopScan(); setScanning(false); };
 
   const onStartCapture = async () => {
     if (await api.startCapture(iface, filter)) {
@@ -160,67 +128,10 @@ function AppInner({
     }
   };
 
-  const onStopCapture = async () => {
-    await api.stopCapture();
-    setCapturing(false);
-  };
-
-  const onStartDiscovery = async () => {
-    await ensureCapture();
-    if (await api.startDiscovery(iface, discoveryName, discoveryPort)) {
-      setDiscoveryRunning(true);
-    }
-  };
-
-  const onStopDiscovery = async () => {
-    await api.stopDiscovery();
-    setDiscoveryRunning(false);
-  };
-
-  const handleLocalOutgoingMessage = useCallback((peer: PeerInfo, content: string) => {
-    const selfPeer: PeerInfo = {
-      name: `localhost:${serverPort}`,
-      ip: "127.0.0.1",
-      port: serverPort,
-      last_seen: {
-        secs_since_epoch: Math.floor(Date.now() / 1000),
-        nanos_since_epoch: 0,
-      },
-    };
-
-    const localMessage: PeerMessage = {
-      from: selfPeer,
-      content,
-      outgoing: true,
-    };
-
-    setMessages((prev) => {
-      const index = prev.findIndex(
-        ([p]) => p.ip === peer.ip && p.port === peer.port
-      );
-
-      if (index === -1) {
-        return [...prev, [peer, [localMessage]]];
-      }
-
-      return prev.map((entry, i) =>
-        i === index ? [entry[0], [...entry[1], localMessage]] : entry
-      );
-    });
-  }, [serverPort]);
+  const onStopCapture = async () => { await api.stopCapture(); setCapturing(false); };
 
   return (
-    <div
-      style={{
-        background: colors.bg,
-        color: colors.text,
-        fontFamily: "'Inter', system-ui, sans-serif",
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
+    <div style={{ background: colors.bg, color: colors.text, fontFamily: "'Inter', system-ui, sans-serif", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <Header
         connected={connected}
         hostCount={hosts.length}
@@ -240,19 +151,12 @@ function AppInner({
           setHostLimit={setHostLimit}
           filter={filter}
           setFilter={setFilter}
-          discoveryName={discoveryName}
-          setDiscoveryName={setDiscoveryName}
-          discoveryPort={discoveryPort}
-          setDiscoveryPort={setDiscoveryPort}
           scanning={scanning}
           capturing={capturing}
-          discoveryRunning={discoveryRunning}
           onStartScan={onStartScan}
           onStopScan={onStopScan}
           onStartCapture={onStartCapture}
           onStopCapture={onStopCapture}
-          onStartDiscovery={onStartDiscovery}
-          onStopDiscovery={onStopDiscovery}
           events={events}
         />
 
@@ -269,8 +173,7 @@ function AppInner({
                 <MessageInbox
                   inbox={messages}
                   peers={peers}
-                  selfPort={serverPort}
-                  onLocalOutgoingMessage={handleLocalOutgoingMessage}
+                  onMessageSent={() => api.fetchMessages().then((m: any) => { if (m) setMessages(m); })}
                 />
               </div>
             )}
@@ -299,11 +202,7 @@ export default function App() {
 
   return (
     <ApiContext.Provider value={api}>
-      <AppInner
-        serverPort={serverPort}
-        wsUrl={wsUrl}
-        onServerPortChange={handlePortChange}
-      />
+      <AppInner serverPort={serverPort} wsUrl={wsUrl} onServerPortChange={handlePortChange} />
     </ApiContext.Provider>
   );
 }

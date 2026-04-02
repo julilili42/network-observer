@@ -5,9 +5,9 @@ export const MAX_FEED_VISIBLE = 60;
 export const MAX_BUFFER_SIZE = 1000;
 
 export function getApiBase(port: number): string {
-  return `http://localhost:${port}`;
+  return `https://localhost:${port}`;
 }
 
 export function getWsUrl(port: number): string {
-  return `ws://localhost:${port}/ws`;
+  return `wss://localhost:${port}/ws`;
 }

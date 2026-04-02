@@ -4,10 +4,7 @@ use etherparse::{ArpPacketSlice, Ipv4Slice, SlicedPacket, TransportSlice};
 use oui_data::lookup;
 use pcap::Packet;
 
-use crate::constants::DISCOVERY_PORT;
-use crate::types::{
-    ArpOperation, ArpPacket, CapturedEvent, DiscoveryPacket, TransportPacket, TransportProtocol,
-};
+use crate::types::{ArpOperation, ArpPacket, CapturedEvent, TransportPacket, TransportProtocol};
 
 extern crate pnet;
 
@@ -72,7 +69,7 @@ fn parse_transport_packet(
         Ipv4Addr::from(ip.header().destination()),
     );
 
-    let (src_port, dst_port, payload, protocol) = match transport {
+    let (src_port, dst_port, _, protocol) = match transport {
         etherparse::TransportSlice::Udp(u) => (
             u.source_port(),
             u.destination_port(),
@@ -86,12 +83,6 @@ fn parse_transport_packet(
             TransportProtocol::Tcp,
         ),
         _ => return None,
-    };
-
-    if src_port == DISCOVERY_PORT || dst_port == DISCOVERY_PORT {
-        let payload = payload;
-        let packet: DiscoveryPacket = serde_json::from_slice(payload).ok()?;
-        return Some(CapturedEvent::Discovery(packet));
     };
 
     Some(CapturedEvent::Transport(TransportPacket {

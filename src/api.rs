@@ -11,7 +11,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{RwLock, broadcast};
 
 use crate::capture::capture_packets;
-use crate::discovery::discovery_sender;
 use crate::helper::{change_flag, find_pcap_interface, find_pnet_interface, get_interface_ipv4};
 use crate::message::PeerMessage;
 use crate::scanner::arp_scan;
@@ -23,6 +22,7 @@ pub struct AppState {
     pub channels: Channels,
     pub flags: Flags,
     pub identity: Identity,
+    pub http: reqwest::Client,
 }
 
 #[derive(Clone)]
@@ -51,7 +51,6 @@ pub struct Channels {
 pub struct Flags {
     pub capture: Arc<AtomicBool>,
     pub scan: Arc<AtomicBool>,
-    pub discovery: Arc<AtomicBool>,
 }
 
 #[derive(Deserialize)]
@@ -64,13 +63,6 @@ pub struct CaptureRequest {
 pub struct ScanRequest {
     pub interface: String,
     pub host_limit: u32,
-}
-
-#[derive(Deserialize)]
-pub struct DiscoveryRequest {
-    pub interface: String,
-    pub name: String,
-    pub port: u16,
 }
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
@@ -162,32 +154,6 @@ pub async fn get_sessions(State(state): State<AppState>) -> Json<Vec<(SessionKey
     let mut sessions: Vec<_> = map.iter().map(|(k, v)| (*k, *v)).collect();
     sessions.sort_by_key(|(_, v)| std::cmp::Reverse(v.bytes_total));
     Json(sessions)
-}
-
-pub async fn start_discovery(
-    State(state): State<AppState>,
-    Json(req): Json<DiscoveryRequest>,
-) -> Result<StatusCode, StatusCode> {
-    let running = state.flags.discovery;
-
-    let interface = find_pnet_interface(&req.interface).ok_or(StatusCode::BAD_REQUEST)?;
-
-    let (name, port) = (req.name, req.port);
-
-    let ip = get_interface_ipv4(&interface).ok_or(StatusCode::BAD_REQUEST)?;
-
-    change_flag(&running)?;
-
-    tokio::task::spawn(async move {
-        discovery_sender(name, ip, port, running).await.ok();
-    });
-
-    Ok(StatusCode::OK)
-}
-
-pub async fn stop_discovery(State(state): State<AppState>) {
-    let running = state.flags.discovery;
-    running.store(false, Ordering::Relaxed);
 }
 
 pub async fn get_peers(State(state): State<AppState>) -> Json<Vec<PeerInfo>> {

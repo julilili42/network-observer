@@ -10,7 +10,6 @@ interface LiveFeedProps {
 
 function eventColor(ev: CapturedEvent): string {
   if (ev.Arp) return colors.accent;
-  if (ev.Discovery) return colors.purple;
   return colors.blue;
 }
 
@@ -75,8 +74,7 @@ export function LiveFeed({ events }: LiveFeedProps) {
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
-              // Discovery events get a subtle left border to stand out
-              borderLeft: ev.Discovery ? `2px solid ${colors.purple}` : "2px solid transparent",
+              borderLeft: "2px solid transparent",
             }}
           >
             {formatEvent(ev)}

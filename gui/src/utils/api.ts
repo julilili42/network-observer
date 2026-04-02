@@ -1,4 +1,12 @@
-import type { HostEntry, CapturedEvent, SessionEntry, SessionKey, SessionStats, PeerInfo, MessageInbox } from "../types";
+import type {
+  HostEntry,
+  CapturedEvent,
+  SessionEntry,
+  SessionKey,
+  SessionStats,
+  PeerInfo,
+  MessageInbox,
+} from "../types";
 
 export function createApi(baseUrl: string) {
   async function post<T>(path: string, body: T): Promise<boolean> {
@@ -90,12 +98,9 @@ export function createApi(baseUrl: string) {
       post("/capture", { interface: iface, filter }),
     stopCapture: () => del("/capture"),
 
-    startDiscovery: (iface: string, name: string, port: number) =>
-      post("/discovery", { interface: iface, name, port }),
-    stopDiscovery: () => del("/discovery"),
-
-    sendPeerMessage: (ip: string, port: number, content: string) =>
-      post("/peers/outgoing_message", { ip, port, content }),
+    // Nur noch name + content — Backend macht den Peer-Lookup selbst
+    sendPeerMessage: (name: string, content: string) =>
+      post("/peers/outgoing_message", { name, content }),
 
     fetchHosts: () => get<HostEntry[]>("/hosts"),
     fetchPackets: () => get<CapturedEvent[]>("/packets"),

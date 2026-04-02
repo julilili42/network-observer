@@ -12,34 +12,26 @@ export function PacketTable({ packets }: PacketTableProps) {
 
   return (
     <div style={{ padding: 20 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: font.mono, fontSize: 12 }}>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontFamily: font.mono,
+          fontSize: 12,
+        }}
+      >
         <THead columns={["Type", "Source", "Destination", "Info", "Size"]} />
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={5}><Empty message="No packets captured yet" /></td>
+              <td colSpan={5}>
+                <Empty message="No packets captured yet" />
+              </td>
             </tr>
           )}
           {rows.map((pkt, i) => {
             const t = pkt.Transport;
             const a = pkt.Arp;
-            const d = pkt.Discovery;
-
-            if (d) {
-              return (
-                <TRow key={i} index={i}>
-                  <TD>
-                    <Badge label="DISCOVERY" color={colors.purple} />
-                  </TD>
-                  <TD color={colors.purple}>{d.ip}</TD>
-                  <TD color={colors.textSecondary}>broadcast</TD>
-                  <TD color={colors.purple} style={{ fontWeight: 600 }}>
-                    {d.operation} · {d.name} · :{d.port}
-                  </TD>
-                  <TD color={colors.textSecondary}>—</TD>
-                </TRow>
-              );
-            }
 
             return (
               <TRow key={i} index={i}>
@@ -49,9 +41,15 @@ export function PacketTable({ packets }: PacketTableProps) {
                     color={t ? colors.blue : colors.accent}
                   />
                 </TD>
-                <TD>{t ? `${t.src_ip}:${t.src_port}` : a ? a.sender_ip : "—"}</TD>
-                <TD>{t ? `${t.dst_ip}:${t.dst_port}` : a ? a.target_ip : "—"}</TD>
-                <TD color={colors.textSecondary}>{t ? t.protocol : a ? a.operation : "—"}</TD>
+                <TD>
+                  {t ? `${t.src_ip}:${t.src_port}` : a ? a.sender_ip : "—"}
+                </TD>
+                <TD>
+                  {t ? `${t.dst_ip}:${t.dst_port}` : a ? a.target_ip : "—"}
+                </TD>
+                <TD color={colors.textSecondary}>
+                  {t ? t.protocol : a ? a.operation : "—"}
+                </TD>
                 <TD color={colors.textSecondary}>{t ? `${t.len}` : "—"}</TD>
               </TRow>
             );
