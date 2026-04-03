@@ -1,9 +1,11 @@
 use crate::{
     api::Store,
-    message::PeerMessage,
-    types::{ArpPacket, CapturedEvent, HostEntry, SessionKey, SessionStats, TransportPacket},
+    types::{
+        ArpPacket, CapturedEvent, FilePayload, HostEntry, PeerEvent, PeerPayload, SessionKey,
+        SessionStats, TransportPacket,
+    },
 };
-use std::{collections::HashMap, net::Ipv4Addr};
+use std::{collections::HashMap, net::Ipv4Addr, path::Path};
 extern crate pnet;
 
 fn normalize_session(session: SessionKey) -> SessionKey {
@@ -80,20 +82,43 @@ async fn handle_arp(store: &Store, packet: ArpPacket) {
     accumulate_arp(table, packet);
 }
 
-async fn handle_message(store: &Store, mut message: PeerMessage) {
-    let mut messages = store.messages.write().await;
-    message.outgoing = false;
-    messages
-        .entry(message.from.clone())
-        .or_default()
-        .push(message);
+async fn handle_peer_event(store: &Store, event: PeerEvent) {
+    match &event.payload {
+        PeerPayload::Message(_) => {
+            let mut messages = store.messages.write().await;
+            messages.entry(event.from.clone()).or_default().push(event);
+        }
+        PeerPayload::File(FilePayload::Data { filename, data, .. }) => {
+            save_file(filename, data).await;
+        }
+        _ => {}
+    }
+}
+
+async fn save_file(filename: &str, data: &[u8]) {
+    if let Err(e) = tokio::fs::create_dir_all("downloads").await {
+        tracing::error!(error=%e, "failed to create download dir");
+        return;
+    }
+
+    let safe_name = Path::new(filename)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown file");
+
+    let path = format!("downloads/{}", safe_name);
+
+    match tokio::fs::write(&path, data).await {
+        Ok(_) => tracing::info!(filename = %safe_name, "File saved to downloads/"),
+        Err(e) => tracing::error!(error = %e, "failed to write file"),
+    }
 }
 
 async fn handle_event(store: &Store, event: CapturedEvent) {
     match event {
         CapturedEvent::Transport(packet) => handle_transport(store, packet).await,
         CapturedEvent::Arp(packet) => handle_arp(store, packet).await,
-        CapturedEvent::IncomingMessage(message) => handle_message(store, message).await,
+        CapturedEvent::Peer(peer_event) => handle_peer_event(store, peer_event).await,
     }
 }
 

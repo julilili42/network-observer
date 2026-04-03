@@ -9,12 +9,15 @@ use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{RwLock, broadcast};
+use uuid::Uuid;
 
 use crate::capture::capture_packets;
 use crate::helper::{change_flag, find_pcap_interface, find_pnet_interface, get_interface_ipv4};
-use crate::message::PeerMessage;
+use crate::message::send_event;
 use crate::scanner::arp_scan;
-use crate::types::{CapturedEvent, HostEntry, PeerInfo, SessionKey, SessionStats};
+use crate::types::{
+    CapturedEvent, HostEntry, PeerEvent, PeerInfo, PeerPayload, SessionKey, SessionStats,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -25,11 +28,45 @@ pub struct AppState {
     pub http: reqwest::Client,
 }
 
+impl AppState {
+    pub async fn find_peer_by_name(&self, name: &str) -> Option<PeerInfo> {
+        let peers = self.store.peers.read().await;
+        peers.values().find(|p| p.name == name).cloned()
+    }
+
+    pub async fn send_to(&self, peer: &PeerInfo, payload: PeerPayload) -> StatusCode {
+        let event = PeerEvent {
+            from: self.identity.as_peer(),
+            payload,
+        };
+
+        send_event(self.clone(), peer.ip, peer.port, &event).await;
+        StatusCode::OK
+    }
+}
+
 #[derive(Clone)]
 pub struct Identity {
     pub name: String,
     pub ip: Ipv4Addr,
     pub port: u16,
+}
+
+impl Identity {
+    pub fn as_peer(&self) -> PeerInfo {
+        PeerInfo {
+            name: self.name.clone(),
+            ip: self.ip,
+            port: self.port,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct PendingTransfer {
+    pub recipient: PeerInfo,
+    pub filename: String,
+    pub data: Vec<u8>,
 }
 
 #[derive(Clone)]
@@ -38,7 +75,8 @@ pub struct Store {
     pub hosts: Arc<RwLock<HashMap<Ipv4Addr, HostEntry>>>,
     pub sessions: Arc<RwLock<HashMap<SessionKey, SessionStats>>>,
     pub peers: Arc<RwLock<HashMap<Ipv4Addr, PeerInfo>>>,
-    pub messages: Arc<RwLock<HashMap<PeerInfo, Vec<PeerMessage>>>>,
+    pub messages: Arc<RwLock<HashMap<PeerInfo, Vec<PeerEvent>>>>,
+    pub pending_transfer: Arc<RwLock<HashMap<Uuid, PendingTransfer>>>,
 }
 
 #[derive(Clone)]
@@ -161,10 +199,7 @@ pub async fn get_peers(State(state): State<AppState>) -> Json<Vec<PeerInfo>> {
     Json(map.values().cloned().collect())
 }
 
-pub async fn get_messages(
-    State(state): State<AppState>,
-) -> Json<Vec<(PeerInfo, Vec<PeerMessage>)>> {
+pub async fn get_messages(State(state): State<AppState>) -> Json<Vec<(PeerInfo, Vec<PeerEvent>)>> {
     let map = state.store.messages.read().await;
-    let messages: Vec<_> = map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-    Json(messages)
+    Json(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
 }

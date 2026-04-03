@@ -24,3 +24,6 @@ tokio-rustls = "0.26"
 axum-server = { version = "0.7", features = ["tls-rustls"] }
 rustls-pemfile = "2"
 sha2 = "0.10"
+uuid = { version = "1.23.0", features = [
+    "v4", "serde"
+]}

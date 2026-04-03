@@ -1,8 +1,7 @@
 use core::fmt;
 use serde::{Deserialize, Serialize};
 use std::{hash::Hash, net::Ipv4Addr};
-
-use crate::message::PeerMessage;
+use uuid::Uuid;
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone, Serialize)]
 pub struct SessionKey {
@@ -18,45 +17,124 @@ pub struct SessionStats {
     pub bytes_total: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileMeta {
+    pub transfer_id: Uuid,
+    pub filename: String,
+    pub size_byte: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FilePayload {
+    Offer {
+        meta: FileMeta,
+    },
+    Accept {
+        transfer_id: Uuid,
+    },
+    Reject {
+        transfer_id: Uuid,
+    },
+    Data {
+        transfer_id: Uuid,
+        filename: String,
+        data: Vec<u8>,
+    },
+    Complete {
+        meta: FileMeta,
+    },
+}
+
+impl fmt::Display for FilePayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FilePayload::Offer { meta } => {
+                write!(f, "FILE OFFER {} ({})", meta.filename, meta.transfer_id)
+            }
+            FilePayload::Accept { transfer_id } => {
+                write!(f, "FILE ACCEPTED {} ", transfer_id)
+            }
+            FilePayload::Reject { transfer_id } => write!(f, "FILE REJECTED {}", transfer_id),
+            FilePayload::Data {
+                transfer_id,
+                filename,
+                data,
+            } => write!(
+                f,
+                "FILE DATA {}: {:?} with id {}",
+                filename, data, transfer_id
+            ),
+            FilePayload::Complete { meta } => write!(f, "FILE COMPLETE {}", meta.filename),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MessagePayload {
+    pub content: String,
+    pub outgoing: bool,
+}
+
+impl fmt::Display for MessagePayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MESSAGE {:?} (outgoing: {})",
+            self.content, self.outgoing
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PeerPayload {
+    Message(MessagePayload),
+    File(FilePayload),
+}
+
+impl fmt::Display for PeerPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PeerPayload::Message(message) => {
+                write!(f, "MESSAGE {message}")
+            }
+            PeerPayload::File(file) => {
+                write!(f, "{file}")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerEvent {
+    pub from: PeerInfo,
+    pub payload: PeerPayload,
+}
+
+impl fmt::Display for PeerEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PEER EVENT {} from {}", self.payload, self.from)
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub enum CapturedEvent {
     Transport(TransportPacket),
     Arp(ArpPacket),
-    IncomingMessage(PeerMessage),
+    Peer(PeerEvent),
 }
 
 impl fmt::Display for CapturedEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CapturedEvent::Transport(packet) => write!(
-                f,
-                "Transport: {}:{} -> {}:{}",
-                packet.src_ip, packet.src_port, packet.dst_ip, packet.dst_port
-            ),
-            CapturedEvent::Arp(packet) => {
-                write!(
-                    f,
-                    "ARP {:?}: {}:{:?} -> {}:{:?}",
-                    packet.operation,
-                    packet.sender_ip,
-                    packet.sender_mac,
-                    packet.target_ip,
-                    packet.target_mac
-                )?;
-
-                if let (Some(oui), Some(org)) = (packet.oui.clone(), packet.org.clone()) {
-                    write!(f, " ({} at {})", oui, org)?
-                }
-
-                Ok(())
+            CapturedEvent::Transport(transport_packet) => {
+                write!(f, "{transport_packet}")
             }
-            CapturedEvent::IncomingMessage(message) => {
-                write!(
-                    f,
-                    "MESSAGE {:?} received from {:?}",
-                    message.content, message.from
-                )?;
-                Ok(())
+            CapturedEvent::Arp(arp_packet) => {
+                write!(f, "{arp_packet}")
+            }
+            CapturedEvent::Peer(peer_event) => {
+                write!(f, "{peer_event}")
             }
         }
     }
@@ -70,6 +148,16 @@ pub struct TransportPacket {
     pub dst_port: u16,
     pub len: usize,
     pub protocol: TransportProtocol,
+}
+
+impl fmt::Display for TransportPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Transport: {}:{} -> {}:{}",
+            self.src_ip, self.src_port, self.dst_ip, self.dst_port
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -87,6 +175,22 @@ pub struct ArpPacket {
     pub operation: ArpOperation,
     pub oui: Option<String>,
     pub org: Option<String>,
+}
+
+impl fmt::Display for ArpPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ARP {:?}: {}:{:?} -> {}:{:?}",
+            self.operation, self.sender_ip, self.sender_mac, self.target_ip, self.target_mac
+        )?;
+
+        if let (Some(oui), Some(org)) = (self.oui.clone(), self.org.clone()) {
+            write!(f, " ({} at {})", oui, org)?
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -118,6 +222,16 @@ pub struct PeerInfo {
     pub name: String,
     pub ip: Ipv4Addr,
     pub port: u16,
+}
+
+impl fmt::Display for PeerInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Name: {}, ip: {}, Port: {}",
+            self.name, self.ip, self.port
+        )
+    }
 }
 
 impl PartialEq for PeerInfo {
