@@ -1,4 +1,4 @@
-# Rust Network Observer
+# Network Observer
 
 A local network observability tool written in Rust. It captures packets,
 discovers hosts via ARP, detects peers via mDNS, and exposes live network
