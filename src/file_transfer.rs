@@ -36,7 +36,6 @@ pub async fn handle_outgoing_file_offer(
     state.store.pending_transfer.write().await.insert(
         transfer_id.clone(),
         PendingTransfer {
-            recipient: recipient.clone(),
             filename: req.file_name.clone(),
             data: req.data,
         },

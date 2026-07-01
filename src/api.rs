@@ -64,7 +64,6 @@ impl Identity {
 
 #[derive(Clone)]
 pub struct PendingTransfer {
-    pub recipient: PeerInfo,
     pub filename: String,
     pub data: Vec<u8>,
 }
