@@ -5,6 +5,7 @@ import type {
   SessionKey,
   SessionStats,
   PeerInfo,
+  PeerEvent,
   MessageInbox,
 } from "../types";
 
@@ -89,6 +90,21 @@ export function createApi(baseUrl: string) {
     return result;
   }
 
+  function normalizePeerEvent(event: PeerEvent) {
+    const message = event.payload.Message;
+    if (!message) return null;
+    return { from: event.from, content: message.content, outgoing: message.outgoing };
+  }
+
+  function normalizeMessages(data: unknown): MessageInbox | null {
+    if (!Array.isArray(data)) return null;
+
+    return data.map(([peer, events]) => [
+      peer,
+      Array.isArray(events) ? events.map(normalizePeerEvent).filter((m) => m !== null) : [],
+    ]);
+  }
+
   return {
     startScan: (iface: string, hostLimit: number) =>
       post("/scan", { interface: iface, host_limit: hostLimit }),
@@ -98,14 +114,17 @@ export function createApi(baseUrl: string) {
       post("/capture", { interface: iface, filter }),
     stopCapture: () => del("/capture"),
 
-    // Nur noch name + content — Backend macht den Peer-Lookup selbst
+    // Only name + content; the backend resolves the peer.
     sendPeerMessage: (name: string, content: string) =>
       post("/peers/outgoing_message", { name, content }),
 
     fetchHosts: () => get<HostEntry[]>("/hosts"),
     fetchPackets: () => get<CapturedEvent[]>("/packets"),
     fetchPeers: () => get<PeerInfo[]>("/peers"),
-    fetchMessages: () => get<MessageInbox>("/peers/messages"),
+    fetchMessages: async () => {
+      const raw = await get<unknown>("/peers/messages");
+      return normalizeMessages(raw);
+    },
     fetchSessions: async (): Promise<SessionEntry[] | null> => {
       const raw = await get<unknown>("/sessions");
       return normalizeSessions(raw);

@@ -29,13 +29,18 @@ export interface PeerMessage {
   outgoing: boolean;
 }
 
+export interface PeerEvent {
+  from: PeerInfo;
+  payload: { Message?: { content: string; outgoing: boolean } };
+}
+
 export type MessagesEntry = [PeerInfo, PeerMessage[]];
 export type MessageInbox = MessagesEntry[];
 
 export type CapturedEvent =
-  | { Transport: TransportPacket; Arp?: never; IncomingMessage?: never }
-  | { Arp: ArpPacket; Transport?: never; IncomingMessage?: never }
-  | { IncomingMessage: PeerMessage; Transport?: never; Arp?: never };
+  | { Transport: TransportPacket; Arp?: never; Peer?: never }
+  | { Arp: ArpPacket; Transport?: never; Peer?: never }
+  | { Peer: PeerEvent; Transport?: never; Arp?: never };
 
 export interface HostEntry {
   ip: string;
@@ -57,9 +62,3 @@ export interface SessionStats {
 
 export type SessionEntry = [SessionKey, SessionStats];
 export type Tab = "graph" | "packets" | "sessions" | "hosts" | "peers" | "messages";
-
-export interface Toast {
-  id: number;
-  from: PeerInfo;
-  content: string;
-}

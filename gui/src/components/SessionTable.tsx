@@ -1,4 +1,3 @@
-import React from "react";
 import { colors, font } from "../theme";
 import { THead, TRow, TD, Empty } from "./ui";
 import { formatBytes } from "../utils/format";

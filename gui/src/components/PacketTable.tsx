@@ -1,4 +1,3 @@
-import React from "react";
 import { colors, font } from "../theme";
 import { THead, TRow, TD, Badge, Empty } from "./ui";
 import type { CapturedEvent } from "../types";

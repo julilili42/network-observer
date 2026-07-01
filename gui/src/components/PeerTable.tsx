@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { colors, font } from "../theme";
 import { THead, TRow, TD, Empty, Badge, Input, Button } from "./ui";
 import { useApi } from "../context/ApiContext";
@@ -32,15 +32,15 @@ export function PeerTable({ peers }: PeerTableProps) {
       <div style={{ marginBottom: 16, padding: "10px 14px", background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8, fontFamily: font.mono, fontSize: 11, color: colors.textMuted, display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: peers.length > 0 ? colors.accent : colors.textMuted, boxShadow: peers.length > 0 ? `0 0 6px ${colors.accentBorder}` : "none", flexShrink: 0 }} />
         {peers.length === 0
-          ? "Keine aktiven Peers — mDNS läuft automatisch"
-          : `${peers.length} aktive${peers.length === 1 ? "r" : ""} Peer${peers.length === 1 ? "" : "s"} im Netzwerk`}
+          ? "No active peers - mDNS is running automatically"
+          : `${peers.length} active peer${peers.length === 1 ? "" : "s"} on the network`}
       </div>
 
       <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: font.mono, fontSize: 12 }}>
-        <THead columns={["Name", "IP Adresse", "Port", "Status", "Nachricht"]} />
+        <THead columns={["Name", "IP Address", "Port", "Status", "Message"]} />
         <tbody>
           {peers.length === 0 && (
-            <tr><td colSpan={5}><Empty message="Noch keine Peers entdeckt" /></td></tr>
+            <tr><td colSpan={5}><Empty message="No peers discovered yet" /></td></tr>
           )}
           {peers.map((peer, i) => {
             const key = peerKey(peer);
@@ -55,7 +55,7 @@ export function PeerTable({ peers }: PeerTableProps) {
                     <Input
                       value={drafts[key] ?? ""}
                       onChange={(e) => setDrafts((prev) => ({ ...prev, [key]: e.target.value }))}
-                      placeholder="Nachricht senden…"
+                      placeholder="Send message..."
                       onKeyDown={(e) => { if (e.key === "Enter" && !sending[key]) void handleSend(peer); }}
                     />
                     <Button
@@ -64,7 +64,7 @@ export function PeerTable({ peers }: PeerTableProps) {
                       color={colors.purple}
                       style={{ flex: "none", minWidth: 78 }}
                     >
-                      {sending[key] ? "Sende…" : "Senden"}
+                      {sending[key] ? "Sending..." : "Send"}
                     </Button>
                   </div>
                 </TD>

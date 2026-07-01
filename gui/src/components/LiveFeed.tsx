@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { colors, font } from "../theme";
 import { formatEvent } from "../utils/format";
 import { MAX_FEED_VISIBLE } from "../utils/config";

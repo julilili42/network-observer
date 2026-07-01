@@ -1,4 +1,3 @@
-import React from "react";
 import { colors, font } from "../theme";
 import type { Tab } from "../types";
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { colors, font } from "../theme";
 import { Label, Input, Button } from "./ui";
 import { LiveFeed } from "./LiveFeed";

@@ -15,7 +15,6 @@ import { SessionTable } from "./components/SessionTable";
 import { HostTable } from "./components/HostTable";
 import { PeerTable } from "./components/PeerTable";
 import { MessageInbox } from "./components/MessageInbox";
-import { MessageToast } from "./components/MessageToast";
 
 import type {
   CapturedEvent,
@@ -23,11 +22,8 @@ import type {
   SessionEntry,
   PeerInfo,
   Tab,
-  Toast,
   MessageInbox as MessageInboxType,
 } from "./types";
-
-let toastCounter = 0;
 
 function AppInner({
   serverPort,
@@ -47,7 +43,6 @@ function AppInner({
   const [events, setEvents] = useState<CapturedEvent[]>([]);
   const [messages, setMessages] = useState<MessageInboxType>([]);
   const [packetCount, setPacketCount] = useState(0);
-  const [toasts, setToasts] = useState<Toast[]>([]);
 
   const [tab, setTab] = useState<Tab>("graph");
   const [scanning, setScanning] = useState(false);
@@ -57,17 +52,8 @@ function AppInner({
   const [filter, setFilter] = useState("");
   const [hostLimit, setHostLimit] = useState(256);
 
-  const dismissToast = useCallback((id: number) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
   const handleEvent = useCallback((ev: CapturedEvent) => {
-    if (ev.IncomingMessage) {
-      const msg = ev.IncomingMessage;
-      setToasts((prev) => [
-        ...prev.slice(-4),
-        { id: ++toastCounter, from: msg.from, content: msg.content },
-      ]);
+    if (ev.Peer?.payload.Message) {
       api.fetchMessages().then((m: any) => { if (m) setMessages(m); });
       return;
     }
@@ -138,7 +124,6 @@ function AppInner({
         packetCount={packetCount}
         sessionCount={sessions.length}
         peerCount={peers.length}
-        serverPort={serverPort}
       />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -181,7 +166,6 @@ function AppInner({
         </main>
       </div>
 
-      <MessageToast toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

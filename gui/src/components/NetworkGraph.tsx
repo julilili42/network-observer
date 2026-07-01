@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import * as d3 from "d3";
 import { colors, font } from "../theme";
 import { formatMac } from "../utils/format";
@@ -520,8 +520,8 @@ export function NetworkGraph({ hosts }: NetworkGraphProps) {
         }}
       >
         <div>Scroll = Zoom</div>
-        <div>Drag freie Fläche = Pan</div>
-        <div>Drag Node = Positionieren</div>
+        <div>Drag empty space = Pan</div>
+        <div>Drag node = Move</div>
       </div>
 
       <svg ref={svgRef} width="100%" height="100%" style={{ display: "block" }} />

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { colors, font } from "../theme";
 import { Input, Button, Empty } from "./ui";
 import { useApi } from "../context/ApiContext";
@@ -60,7 +60,6 @@ export function MessageInbox({ inbox, peers, onMessageSent }: MessageInboxProps)
 
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
-      {/* Peer-Liste */}
       <div style={{ width: 240, minWidth: 240, borderRight: `1px solid ${colors.border}`, display: "flex", flexDirection: "column", overflow: "hidden", background: colors.surface }}>
         <div style={{ padding: "12px 14px", borderBottom: `1px solid ${colors.border}`, fontFamily: font.mono, fontSize: 10, fontWeight: 600, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 1 }}>
           Conversations
@@ -68,7 +67,7 @@ export function MessageInbox({ inbox, peers, onMessageSent }: MessageInboxProps)
         <div style={{ flex: 1, overflowY: "auto" }}>
           {allPeers.length === 0 && (
             <div style={{ padding: 20, fontFamily: font.mono, fontSize: 11, color: colors.textMuted, textAlign: "center", lineHeight: 1.6 }}>
-              Noch keine Peers.<br />mDNS läuft automatisch.
+              No peers yet.<br />mDNS is running automatically.
             </div>
           )}
           {allPeers.map((peer) => {
@@ -92,7 +91,7 @@ export function MessageInbox({ inbox, peers, onMessageSent }: MessageInboxProps)
                 <div style={{ fontFamily: font.mono, fontSize: 10, color: colors.textMuted, paddingLeft: 12 }}>{peer.ip}:{peer.port}</div>
                 {lastMsg && (
                   <div style={{ fontFamily: font.sans, fontSize: 11, color: colors.textSecondary, paddingLeft: 12, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {lastMsg.outgoing ? `Du: ${lastMsg.content}` : lastMsg.content}
+                    {lastMsg.outgoing ? `You: ${lastMsg.content}` : lastMsg.content}
                   </div>
                 )}
               </div>
@@ -101,11 +100,10 @@ export function MessageInbox({ inbox, peers, onMessageSent }: MessageInboxProps)
         </div>
       </div>
 
-      {/* Chat-Bereich */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {!selectedPeer ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Empty message="Wähle einen Peer aus" />
+            <Empty message="Select a peer" />
           </div>
         ) : (
           <>
@@ -120,7 +118,7 @@ export function MessageInbox({ inbox, peers, onMessageSent }: MessageInboxProps)
             <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
               {selectedMessages.length === 0 && (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Empty message="Noch keine Nachrichten" />
+                  <Empty message="No messages yet" />
                 </div>
               )}
               {selectedMessages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
@@ -131,7 +129,7 @@ export function MessageInbox({ inbox, peers, onMessageSent }: MessageInboxProps)
               <Input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder={`Nachricht an ${selectedPeer.name}…`}
+                placeholder={`Message ${selectedPeer.name}...`}
                 onKeyDown={(e) => { if (e.key === "Enter" && !sending) void handleSend(); }}
                 style={{ flex: 1 }}
               />
@@ -141,7 +139,7 @@ export function MessageInbox({ inbox, peers, onMessageSent }: MessageInboxProps)
                 color={colors.purple}
                 style={{ flex: "none", minWidth: 90 }}
               >
-                {sending ? "Sende…" : "Senden"}
+                {sending ? "Sending..." : "Send"}
               </Button>
             </div>
           </>
@@ -157,7 +155,7 @@ function MessageBubble({ msg }: { msg: PeerMessage }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: "80%", alignSelf: outgoing ? "flex-end" : "flex-start" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: outgoing ? "flex-end" : "flex-start" }}>
         <span style={{ fontFamily: font.mono, fontSize: 10, fontWeight: 700, color: outgoing ? colors.accent : colors.purple }}>
-          {outgoing ? "Du" : msg.from.name}
+          {outgoing ? "You" : msg.from.name}
         </span>
         <span style={{ fontFamily: font.mono, fontSize: 9, color: colors.textMuted }}>{msg.from.ip}:{msg.from.port}</span>
       </div>

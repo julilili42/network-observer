@@ -1,9 +1,9 @@
-import React from "react";
+import type { CSSProperties, InputHTMLAttributes, ReactNode } from "react";
 import { colors, font } from "../../theme";
 
 /* ── Label ─────────────────────────────────────────── */
 
-export function Label({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+export function Label({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
     <div
       style={{
@@ -24,7 +24,7 @@ export function Label({ children, style }: { children: React.ReactNode; style?: 
 
 /* ── Input ─────────────────────────────────────────── */
 
-export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   const { style, ...rest } = props;
   return (
     <input
@@ -52,11 +52,11 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 /* ── Button ────────────────────────────────────────── */
 
 interface ButtonProps {
-  children: React.ReactNode;
+  children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
   color?: string;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 }
 
 export function Button({ children, onClick, disabled, color = colors.accent, style }: ButtonProps) {
