@@ -129,10 +129,10 @@ pub fn spawn_event_processing(
 ) {
     tokio::spawn(async move {
         while let Some(event) = internal_rx.recv().await {
-            // Save events
+            // save captured events
             buffer_event(&store, &event).await;
 
-            // Process events
+            // process captured events
             handle_event(&store, event.clone()).await;
 
             // Captured event -> Broadcast channel -> Websocket

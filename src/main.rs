@@ -125,6 +125,7 @@ async fn start_server(app: Router, port: u16, tls_identity: tls::TlsIdentity) {
 
 #[tokio::main]
 async fn main() {
+    // initialize tracing and crypto provider
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .init();
@@ -133,39 +134,48 @@ async fn main() {
         .install_default()
         .expect("Failed to install ring crypto provider");
 
+    // external_tx is 1:n sender of last 100 captured events > used for websocket > client connected to ws receives external_rx
     let (external_tx, _) = broadcast::channel::<CapturedEvent>(100);
-    let (internal_tx, internal_rx) = tokio::sync::mpsc::channel(1000);
-
-    let capture = Arc::new(AtomicBool::new(false));
-    let scan = Arc::new(AtomicBool::new(false));
 
     let external_tx_clone = external_tx.clone();
 
+    // currently bounded to 1000 captured events > when processing falls behind > capturing thread is blocked
+    let (internal_tx, internal_rx) = tokio::sync::mpsc::channel(1000);
+
+    let channels = Channels {
+        internal_tx,
+        external_tx,
+    };
+
+    // thread save variables
+    let capture = Arc::new(AtomicBool::new(false));
+    let scan = Arc::new(AtomicBool::new(false));
+
+    let flags = Flags { capture, scan };
+
+    // port variable is set via environment variable
     let port: u16 = std::env::var("PORT")
         .unwrap_or_else(|_| "3000".into())
         .parse::<u16>()
         .unwrap_or_else(|_| 3000);
     let device_name = std::env::var("DEVICE_NAME").unwrap_or_else(|_| "Unknown".into());
 
+    // generates self-signed tls certificate
     let tls_identity = tls::load_or_generate(&device_name);
     tracing::info!("TLS identity ready");
+
+    // first contact trusted blindly > saved for later contact > SSH model
+    let tofu_verifier = tls::TofuVerifier::new();
+
+    // tls used to encrypt communication
+    let http = tls::build_http_client(tofu_verifier);
 
     let identity = build_identity(port, device_name).expect("Failed to build identity");
 
     let store = build_store();
-
     let store_clone = store.clone();
-    let channels = Channels {
-        internal_tx,
-        external_tx,
-    };
-    let flags = Flags { capture, scan };
 
-    let tofu_verifier = tls::TofuVerifier::new();
-
-    let http = tls::build_http_client(tofu_verifier);
-
-    // start mdns discovery
+    // start multicast dns discovery > name resolver in localnet
     let _ = start_mdns(
         identity.name.clone(),
         identity.ip,
@@ -174,7 +184,7 @@ async fn main() {
     );
     tracing::info!("Started mdns");
 
-    // processes received packets
+    // start processing thread of captured events
     spawn_event_processing(store_clone, internal_rx, external_tx_clone);
     tracing::info!("Started event processing");
 
