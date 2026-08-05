@@ -27,12 +27,14 @@ fn accumulate_stats(
     session_key: SessionKey,
     packet_len: usize,
 ) {
-    let key = normalize_session(session_key);
+    let normalized_key = normalize_session(session_key);
 
-    let stats = session_map.entry(key).or_insert_with(|| SessionStats {
-        packets_total: 0,
-        bytes_total: 0,
-    });
+    let stats = session_map
+        .entry(normalized_key)
+        .or_insert_with(|| SessionStats {
+            packets_total: 0,
+            bytes_total: 0,
+        });
 
     stats.packets_total += 1;
     stats.bytes_total += packet_len;
@@ -139,4 +141,50 @@ pub fn spawn_event_processing(
             let _ = external_tx.send(event);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_reverse_direction_to_same_session() {
+        let session = SessionKey {
+            a_ip: Ipv4Addr::LOCALHOST,
+            a_port: 8080,
+            b_ip: Ipv4Addr::BROADCAST,
+            b_port: 4040,
+        };
+        let reverse_session = SessionKey {
+            a_ip: Ipv4Addr::BROADCAST,
+            a_port: 4040,
+            b_ip: Ipv4Addr::LOCALHOST,
+            b_port: 8080,
+        };
+        assert_eq!(
+            normalize_session(session),
+            normalize_session(reverse_session)
+        )
+    }
+
+    #[test]
+    fn accumulates_packet_count_and_bytes() {
+        let mut session_map: HashMap<SessionKey, SessionStats> = HashMap::new();
+        let session_key = SessionKey {
+            a_ip: Ipv4Addr::LOCALHOST,
+            a_port: 8080,
+            b_ip: Ipv4Addr::BROADCAST,
+            b_port: 4040,
+        };
+
+        accumulate_stats(&mut session_map, session_key, 100);
+        accumulate_stats(&mut session_map, session_key, 50);
+
+        let value = session_map
+            .get(&session_key)
+            .expect("a session should have been inserted");
+        assert_eq!(value.bytes_total, 150);
+        assert_eq!(value.packets_total, 2);
+        assert_eq!(session_map.len(), 1);
+    }
 }
