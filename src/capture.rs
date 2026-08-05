@@ -32,7 +32,7 @@ fn run_capture_loop<T: Activated>(
     while running.load(Ordering::Relaxed) {
         match capture.next_packet() {
             Ok(packet) => {
-                if let Some(packet_info) = parse_packet(&packet) {
+                if let Some(packet_info) = parse_packet(packet.data) {
                     tracing::debug!(packet = %packet_info, "captured");
                     let _ = packet_tx.blocking_send(packet_info);
                 }

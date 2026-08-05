@@ -3,7 +3,7 @@ export interface TransportPacket {
   src_port: number;
   dst_ip: string;
   dst_port: number;
-  len: number;
+  packet_len: number;
   protocol: "Tcp" | "Udp";
 }
 
@@ -61,4 +61,5 @@ export interface SessionStats {
 }
 
 export type SessionEntry = [SessionKey, SessionStats];
-export type Tab = "graph" | "packets" | "sessions" | "hosts" | "peers" | "messages";
+export type Tab =
+  "graph" | "packets" | "sessions" | "hosts" | "peers" | "messages";

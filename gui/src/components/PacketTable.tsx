@@ -49,7 +49,9 @@ export function PacketTable({ packets }: PacketTableProps) {
                 <TD color={colors.textSecondary}>
                   {t ? t.protocol : a ? a.operation : "—"}
                 </TD>
-                <TD color={colors.textSecondary}>{t ? `${t.len}` : "—"}</TD>
+                <TD color={colors.textSecondary}>
+                  {t ? `${t.packet_len}` : "—"}
+                </TD>
               </TRow>
             );
           })}

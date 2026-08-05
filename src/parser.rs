@@ -1,20 +1,17 @@
-use std::net::Ipv4Addr;
-
-use etherparse::{ArpPacketSlice, Ipv4Slice, SlicedPacket, TransportSlice};
-use oui_data::lookup;
-use pcap::Packet;
-
 use crate::types::{ArpOperation, ArpPacket, CapturedEvent, TransportPacket, TransportProtocol};
-
+use etherparse::{ArpPacketSlice, Ipv4Slice, NetSlice, SlicedPacket, TransportSlice};
+use oui_data::lookup;
+use std::net::Ipv4Addr;
 extern crate pnet;
 
-pub fn parse_packet(captured_packet: &Packet) -> Option<CapturedEvent> {
-    let len = captured_packet.len();
-    let sliced = SlicedPacket::from_ethernet(captured_packet.data).ok()?;
-
-    match sliced.net? {
-        etherparse::NetSlice::Arp(arp) => parse_arp_packet(arp),
-        etherparse::NetSlice::Ipv4(ip) => parse_transport_packet(ip, sliced.transport?, len),
+pub fn parse_packet(captured_packet: &[u8]) -> Option<CapturedEvent> {
+    let sliced = SlicedPacket::from_ethernet(captured_packet).ok()?;
+    let packet_len = captured_packet.len();
+    match (sliced.net, sliced.transport) {
+        (Some(NetSlice::Arp(arp)), _) => parse_arp_packet(arp),
+        (Some(NetSlice::Ipv4(ip)), Some(transport_slice)) => {
+            parse_flow(ip, transport_slice, packet_len)
+        }
         _ => None,
     }
 }
@@ -30,23 +27,7 @@ fn parse_arp_packet(arp: ArpPacketSlice) -> Option<CapturedEvent> {
         arp.target_hw_addr().try_into().unwrap(),
     );
     let operation = ArpOperation::from(arp.operation());
-
-    let (oui, org) = match operation {
-        ArpOperation::Reply => {
-            let lookup_mac: String = sender_mac[..3]
-                .iter()
-                .map(|b| format!("{:02X}", b))
-                .collect();
-            match lookup(&lookup_mac) {
-                Some(record) => (
-                    Some(record.oui().to_string()),
-                    Some(record.organization().to_string()),
-                ),
-                None => (None, None),
-            }
-        }
-        ArpOperation::Request => (None, None),
-    };
+    let (oui, org) = oui_lookup(operation, sender_mac);
 
     Some(CapturedEvent::Arp(ArpPacket {
         sender_ip,
@@ -59,27 +40,25 @@ fn parse_arp_packet(arp: ArpPacketSlice) -> Option<CapturedEvent> {
     }))
 }
 
-fn parse_transport_packet(
-    ip: Ipv4Slice,
-    transport: TransportSlice,
-    len: usize,
+fn parse_flow(
+    ipv4_slice: Ipv4Slice,
+    transport_slice: TransportSlice,
+    packet_len: usize,
 ) -> Option<CapturedEvent> {
     let (src_ip, dst_ip) = (
-        Ipv4Addr::from(ip.header().source()),
-        Ipv4Addr::from(ip.header().destination()),
+        Ipv4Addr::from(ipv4_slice.header().source()),
+        Ipv4Addr::from(ipv4_slice.header().destination()),
     );
 
-    let (src_port, dst_port, _, protocol) = match transport {
-        etherparse::TransportSlice::Udp(u) => (
-            u.source_port(),
-            u.destination_port(),
-            u.payload(),
+    let (src_port, dst_port, protocol) = match transport_slice {
+        TransportSlice::Udp(udp_slice) => (
+            udp_slice.source_port(),
+            udp_slice.destination_port(),
             TransportProtocol::Udp,
         ),
-        etherparse::TransportSlice::Tcp(t) => (
-            t.source_port(),
-            t.destination_port(),
-            t.payload(),
+        TransportSlice::Tcp(tcp_slice) => (
+            tcp_slice.source_port(),
+            tcp_slice.destination_port(),
             TransportProtocol::Tcp,
         ),
         _ => return None,
@@ -90,7 +69,26 @@ fn parse_transport_packet(
         src_port,
         dst_ip,
         dst_port,
-        len,
         protocol,
+        packet_len,
     }))
+}
+
+fn oui_lookup(operation: ArpOperation, sender_mac: [u8; 6]) -> (Option<String>, Option<String>) {
+    match operation {
+        ArpOperation::Reply => {
+            let lookup_mac: String = sender_mac[..3]
+                .iter()
+                .map(|b| format!("{:02X}", b))
+                .collect();
+
+            lookup(&lookup_mac).map_or((None, None), |record| {
+                (
+                    Some(record.oui().to_string()),
+                    Some(record.organization().to_string()),
+                )
+            })
+        }
+        ArpOperation::Request => (None, None),
+    }
 }

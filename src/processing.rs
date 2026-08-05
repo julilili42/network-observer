@@ -73,7 +73,7 @@ async fn handle_transport(store: &Store, packet: TransportPacket) {
             b_ip: packet.dst_ip,
             b_port: packet.dst_port,
         },
-        packet.len,
+        packet.packet_len,
     );
 }
 

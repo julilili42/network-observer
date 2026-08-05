@@ -146,8 +146,8 @@ pub struct TransportPacket {
     pub src_port: u16,
     pub dst_ip: Ipv4Addr,
     pub dst_port: u16,
-    pub len: usize,
     pub protocol: TransportProtocol,
+    pub packet_len: usize,
 }
 
 impl fmt::Display for TransportPacket {
