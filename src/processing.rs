@@ -7,6 +7,7 @@ use crate::{
 };
 use std::{collections::HashMap, net::Ipv4Addr, path::Path};
 extern crate pnet;
+use tokio::sync::{broadcast, mpsc};
 
 fn normalize_session(session: SessionKey) -> SessionKey {
     if (session.a_ip, session.a_port) < (session.b_ip, session.b_port) {
@@ -37,12 +38,12 @@ fn accumulate_stats(
     stats.bytes_total += packet_len;
 }
 
-fn accumulate_arp(arp_table: &mut HashMap<Ipv4Addr, HostEntry>, arp_packet: ArpPacket) {
+fn accumulate_arp(arp_table: &mut HashMap<Ipv4Addr, HostEntry>, packet: &ArpPacket) {
     arp_table.insert(
-        arp_packet.sender_ip,
+        packet.sender_ip,
         HostEntry {
-            ip: arp_packet.sender_ip,
-            mac: arp_packet.sender_mac,
+            ip: packet.sender_ip,
+            mac: packet.sender_mac,
             last_seen: std::time::SystemTime::now(),
         },
     );
@@ -53,17 +54,7 @@ fn should_buffer(event: &CapturedEvent) -> bool {
     matches!(event, CapturedEvent::Transport(_) | CapturedEvent::Arp(_))
 }
 
-async fn buffer_event(store: &Store, event: &CapturedEvent) {
-    if should_buffer(&event) {
-        let mut buf = store.events.write().await;
-        buf.push_back(event.clone());
-        if buf.len() > 1000 {
-            buf.pop_front();
-        }
-    }
-}
-
-async fn handle_transport(store: &Store, packet: TransportPacket) {
+async fn handle_transport(store: &Store, packet: &TransportPacket) {
     let session_map = &mut store.sessions.write().await;
     accumulate_stats(
         session_map,
@@ -77,16 +68,19 @@ async fn handle_transport(store: &Store, packet: TransportPacket) {
     );
 }
 
-async fn handle_arp(store: &Store, packet: ArpPacket) {
+async fn handle_arp(store: &Store, packet: &ArpPacket) {
     let table = &mut store.hosts.write().await;
     accumulate_arp(table, packet);
 }
 
-async fn handle_peer_event(store: &Store, event: PeerEvent) {
+async fn handle_peer_event(store: &Store, event: &PeerEvent) {
     match &event.payload {
         PeerPayload::Message(_) => {
             let mut messages = store.messages.write().await;
-            messages.entry(event.from.clone()).or_default().push(event);
+            messages
+                .entry(event.from.clone())
+                .or_default()
+                .push(event.clone());
         }
         PeerPayload::File(FilePayload::Data { filename, data, .. }) => {
             save_file(filename, data).await;
@@ -114,7 +108,7 @@ async fn save_file(filename: &str, data: &[u8]) {
     }
 }
 
-async fn handle_event(store: &Store, event: CapturedEvent) {
+async fn handle_event(store: &Store, event: &CapturedEvent) {
     match event {
         CapturedEvent::Transport(packet) => handle_transport(store, packet).await,
         CapturedEvent::Arp(packet) => handle_arp(store, packet).await,
@@ -124,16 +118,22 @@ async fn handle_event(store: &Store, event: CapturedEvent) {
 
 pub fn spawn_event_processing(
     store: Store,
-    mut internal_rx: tokio::sync::mpsc::Receiver<CapturedEvent>,
-    external_tx: tokio::sync::broadcast::Sender<CapturedEvent>,
+    mut internal_rx: mpsc::Receiver<CapturedEvent>,
+    external_tx: broadcast::Sender<CapturedEvent>,
 ) {
     tokio::spawn(async move {
         while let Some(event) = internal_rx.recv().await {
             // save captured events
-            buffer_event(&store, &event).await;
+            if should_buffer(&event) {
+                let mut buf = store.events.write().await;
+                buf.push_back(event.clone());
+                if buf.len() > 1000 {
+                    buf.pop_front();
+                }
+            }
 
             // process captured events
-            handle_event(&store, event.clone()).await;
+            handle_event(&store, &event).await;
 
             // Captured event -> Broadcast channel -> Websocket
             let _ = external_tx.send(event);

@@ -64,10 +64,10 @@ pub fn load_or_generate(device_name: &str) -> TlsIdentity {
     fs::write(CERT_PATH, &cert_pem).expect("Failed to write cert");
     fs::write(KEY_PATH, &key_pem).expect("Failed to write key");
 
-    return TlsIdentity {
+    TlsIdentity {
         cert: cert_pem,
         key: key_pem,
-    };
+    }
 }
 
 pub fn build_http_client(verifier: Arc<TofuVerifier>) -> reqwest::Client {

@@ -34,7 +34,7 @@ pub async fn handle_outgoing_file_offer(
     let size_bytes = req.data.len() as u64;
 
     state.store.pending_transfer.write().await.insert(
-        transfer_id.clone(),
+        transfer_id,
         PendingTransfer {
             filename: req.file_name.clone(),
             data: req.data,

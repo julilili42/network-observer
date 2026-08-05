@@ -105,13 +105,14 @@ pub fn arp_scan(
         }
         let mut ethernet_buffer = [0u8; 42];
 
-        match construct_arp_request(&mut ethernet_buffer, sender_mac, sender_ip, target_ip) {
-            Some(packet) => match tx.send_to(packet.packet(), None) {
+        if let Some(packet) =
+            construct_arp_request(&mut ethernet_buffer, sender_mac, sender_ip, target_ip)
+        {
+            match tx.send_to(packet.packet(), None) {
                 Some(Ok(_)) => tracing::debug!(target = %target_ip, "Sending ARP"),
                 Some(Err(e)) => return Err(ScanError::SendError(e)),
                 None => {}
-            },
-            None => {}
+            }
         }
 
         std::thread::sleep(Duration::from_millis(2));

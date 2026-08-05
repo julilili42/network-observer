@@ -205,7 +205,7 @@ impl From<etherparse::ArpOperation> for ArpOperation {
         match op {
             etherparse::ArpOperation::REQUEST => ArpOperation::Request,
             etherparse::ArpOperation::REPLY => ArpOperation::Reply,
-            _ => return ArpOperation::Request,
+            _ => ArpOperation::Request,
         }
     }
 }

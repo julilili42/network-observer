@@ -15,13 +15,11 @@ pub fn get_interface_ipv4(interface: &NetworkInterface) -> Option<Ipv4Addr> {
 }
 
 pub fn find_pnet_interface(interface_name: &str) -> Option<NetworkInterface> {
-    let interface_names_match = |iface: &NetworkInterface| iface.name == interface_name;
-
     // Find the network interface with the provided name
     let interfaces = datalink::interfaces();
-    let interface = interfaces.into_iter().filter(interface_names_match).next();
-
-    interface
+    interfaces
+        .into_iter()
+        .find(|interface| interface.name == interface_name)
 }
 
 pub fn find_pcap_interface(interface_name: &str) -> Result<Device, pcap::Error> {
@@ -31,12 +29,10 @@ pub fn find_pcap_interface(interface_name: &str) -> Result<Device, pcap::Error> 
         tracing::debug!("pcap device: {}", d.name);
     }
 
-    let device = devices
+    devices
         .into_iter()
         .find(|d| d.name == interface_name)
-        .ok_or(pcap::Error::PcapError("Interface not found".into()));
-
-    device
+        .ok_or(pcap::Error::PcapError("Interface not found".into()))
 }
 
 // change running flags

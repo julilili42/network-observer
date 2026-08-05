@@ -56,20 +56,20 @@ pub fn browse_services(
         for event in receiver {
             match event {
                 ServiceEvent::ServiceResolved(info) => {
-                    if let Some(addr) = info.get_addresses().iter().next() {
-                        if let IpAddr::V4(ipv4) = addr.to_ip_addr() {
-                            let peer = PeerInfo {
-                                name: info.get_hostname().trim_end_matches(".local.").to_string(),
-                                ip: ipv4,
-                                port: info.get_port(),
-                            };
-                            if peer.name == self_name || peer.ip == self_ip {
-                                continue;
-                            }
-
-                            let mut peers = peers.blocking_write();
-                            peers.insert(peer.ip, peer);
+                    if let Some(addr) = info.get_addresses().iter().next()
+                        && let IpAddr::V4(ipv4) = addr.to_ip_addr()
+                    {
+                        let peer = PeerInfo {
+                            name: info.get_hostname().trim_end_matches(".local.").to_string(),
+                            ip: ipv4,
+                            port: info.get_port(),
+                        };
+                        if peer.name == self_name || peer.ip == self_ip {
+                            continue;
                         }
+
+                        let mut peers = peers.blocking_write();
+                        peers.insert(peer.ip, peer);
                     }
                 }
                 ServiceEvent::ServiceRemoved(_type, fullname) => {

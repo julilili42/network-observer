@@ -10,7 +10,7 @@ extern crate pnet;
 pub fn capture_packets(
     capturing_device: Device,
     filter_str: &str,
-    packet_tx: mpsc::Sender<CapturedEvent>,
+    internal_tx: mpsc::Sender<CapturedEvent>,
     running: Arc<AtomicBool>,
 ) -> Result<(), pcap::Error> {
     let mut cap = Capture::from_device(capturing_device)?
@@ -20,7 +20,7 @@ pub fn capture_packets(
 
     cap.filter(filter_str, true)?;
 
-    run_capture_loop(running, cap, packet_tx)
+    run_capture_loop(running, cap, internal_tx)
 }
 
 // both Offline and Active implement the Activated trait
@@ -60,7 +60,7 @@ mod tests {
     use std::sync::atomic::AtomicBool;
 
     #[test]
-    fn capture_packet_is_sent_as_event() {
+    fn udp_packet_is_sent_as_event() {
         let capture = Capture::from_file("tests/fixtures/one_udp_packet.pcap")
             .expect("fixture should be readable");
 
@@ -76,6 +76,6 @@ mod tests {
             panic!("expected transport packet, got {event:?}")
         };
 
-        assert_eq!(matches!(packet.protocol, TransportProtocol::Udp), true);
+        assert!(matches!(packet.protocol, TransportProtocol::Udp));
     }
 }

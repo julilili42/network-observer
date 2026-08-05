@@ -29,7 +29,7 @@ use axum::{
     routing::{get, post},
 };
 use axum_server::tls_rustls::RustlsConfig;
-use rustls;
+use rustls::crypto;
 use std::net::Ipv4Addr;
 use std::{
     collections::{HashMap, VecDeque},
@@ -104,7 +104,7 @@ fn build_identity(port: u16, device_name: String) -> Option<Identity> {
 
     Some(Identity {
         name: device_name,
-        ip: get_interface_ipv4(&interface).unwrap_or_else(|| Ipv4Addr::UNSPECIFIED),
+        ip: get_interface_ipv4(&interface).unwrap_or(Ipv4Addr::UNSPECIFIED),
         port,
     })
 }
@@ -130,7 +130,7 @@ async fn main() {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
-    rustls::crypto::ring::default_provider()
+    crypto::ring::default_provider()
         .install_default()
         .expect("Failed to install ring crypto provider");
 
@@ -155,9 +155,9 @@ async fn main() {
 
     // port variable is set via environment variable
     let port: u16 = std::env::var("PORT")
-        .unwrap_or_else(|_| "3000".into())
+        .unwrap_or("3000".into())
         .parse::<u16>()
-        .unwrap_or_else(|_| 3000);
+        .unwrap_or(3000);
     let device_name = std::env::var("DEVICE_NAME").unwrap_or_else(|_| "Unknown".into());
 
     // generates self-signed tls certificate

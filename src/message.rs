@@ -81,7 +81,6 @@ pub async fn send_event(state: AppState, ip: Ipv4Addr, port: u16, event: &PeerEv
 
     if let Err(e) = res {
         tracing::error!(error = %e, "event send failed");
-        return;
     }
 }
 
@@ -93,7 +92,6 @@ pub async fn handle_incoming(
 
     // side effect: peer accepted file offer -> send file
     if let PeerPayload::File(FilePayload::Accept { transfer_id }) = event.payload {
-        let transfer_id = transfer_id.clone();
         let recipient = event.from.clone();
         let state_clone = state.clone();
 
@@ -132,7 +130,7 @@ async fn send_pending_file(state: AppState, transfer_id: Uuid, recipient: PeerIn
     let event = PeerEvent {
         from: sender,
         payload: PeerPayload::File(FilePayload::Data {
-            transfer_id: transfer_id.clone(),
+            transfer_id,
             filename: transfer.filename,
             data: transfer.data,
         }),
