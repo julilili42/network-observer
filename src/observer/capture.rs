@@ -1,4 +1,4 @@
-use crate::parser::parse_packet;
+use super::parser::parse_packet;
 use crate::types::CapturedEvent;
 use pcap::{Activated, Capture, Device};
 use std::sync::Arc;

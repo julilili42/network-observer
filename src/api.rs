@@ -1,20 +1,24 @@
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::{Json, extract::State};
+use axum::{
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    http::StatusCode,
+    response::IntoResponse,
+    {Json, extract::State},
+};
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::net::Ipv4Addr;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    collections::{HashMap, VecDeque},
+    net::Ipv4Addr,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
 
-use crate::capture::capture_packets;
 use crate::helper::{change_flag, find_pcap_interface, find_pnet_interface, get_interface_ipv4};
-use crate::message::send_event;
-use crate::scanner::arp_scan;
+use crate::observer::{capture::capture_packets, scanner::arp_scan};
+use crate::transfer::message::send_event;
 use crate::types::{
     CapturedEvent, HostEntry, PeerEvent, PeerInfo, PeerPayload, SessionKey, SessionStats,
 };

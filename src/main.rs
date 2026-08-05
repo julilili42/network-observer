@@ -1,13 +1,8 @@
 mod api;
-mod capture;
-mod file_transfer;
 mod helper;
-mod mdns;
-mod message;
-mod parser;
+mod observer;
 mod processing;
-mod scanner;
-mod tls;
+mod transfer;
 mod types;
 
 extern crate pnet;
@@ -16,13 +11,16 @@ use crate::api::{
     start_scan, stop_capture, stop_scan, ws_handler,
 };
 use crate::api::{Channels, Flags, Store, get_peers};
-use crate::file_transfer::{
+use crate::helper::{find_pnet_interface, get_interface_ipv4};
+use crate::processing::spawn_event_processing;
+use crate::transfer::file_transfer::{
     handle_outgoing_file_accept, handle_outgoing_file_offer, handle_outgoing_file_reject,
 };
-use crate::helper::{find_pnet_interface, get_interface_ipv4};
-use crate::mdns::start_mdns;
-use crate::message::{handle_incoming, handle_outgoing_message};
-use crate::processing::spawn_event_processing;
+use crate::transfer::{
+    mdns::start_mdns,
+    message::{handle_incoming, handle_outgoing_message},
+    tls,
+};
 use axum::http::{Method, header};
 use axum::{
     Router,
