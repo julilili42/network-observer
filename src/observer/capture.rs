@@ -1,5 +1,6 @@
+use crate::observer::types::ObserverEvent;
+
 use super::parser::parse_packet;
-use crate::types::CapturedEvent;
 use pcap::{Activated, Capture, Device};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,7 +11,7 @@ extern crate pnet;
 pub fn capture_packets(
     capturing_device: Device,
     filter_str: &str,
-    internal_tx: mpsc::Sender<CapturedEvent>,
+    internal_tx: mpsc::Sender<ObserverEvent>,
     running: Arc<AtomicBool>,
 ) -> Result<(), pcap::Error> {
     let mut cap = Capture::from_device(capturing_device)?
@@ -27,7 +28,7 @@ pub fn capture_packets(
 fn run_capture_loop<T: Activated>(
     running: Arc<AtomicBool>,
     mut capture: Capture<T>,
-    packet_tx: mpsc::Sender<CapturedEvent>,
+    packet_tx: mpsc::Sender<ObserverEvent>,
 ) -> Result<(), pcap::Error> {
     while running.load(Ordering::Relaxed) {
         match capture.next_packet() {
@@ -55,8 +56,10 @@ fn run_capture_loop<T: Activated>(
 
 #[cfg(test)]
 mod tests {
+    use crate::observer::types::ObserverEvent;
+
+    use super::super::types::TransportProtocol;
     use super::*;
-    use crate::types::TransportProtocol;
     use std::sync::atomic::AtomicBool;
 
     #[test]
@@ -72,7 +75,7 @@ mod tests {
         let event = packet_rx
             .blocking_recv()
             .expect("an packet should have been sent");
-        let CapturedEvent::Transport(packet) = event else {
+        let ObserverEvent::Transport(packet) = event else {
             panic!("expected transport packet, got {event:?}")
         };
 

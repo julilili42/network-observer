@@ -1,31 +1,37 @@
+use crate::observer::{capture::capture_packets, scanner::arp_scan};
+use crate::transfer::message::send_event;
+use crate::transfer::types::{PeerEvent, PeerInfo, PeerPayload};
+use crate::{
+    helper::{change_flag, find_pcap_interface, find_pnet_interface, get_interface_ipv4},
+    observer::types::ObserverEvent,
+};
+use crate::{
+    observer::types::{
+        ArpPacket, HostEntry, ObserverStore, SessionKey, SessionStats, TransportPacket,
+    },
+    transfer::types::TransferStore,
+};
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     http::StatusCode,
     response::IntoResponse,
     {Json, extract::State},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     net::Ipv4Addr,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
 };
-use tokio::sync::{RwLock, broadcast};
-use uuid::Uuid;
-
-use crate::helper::{change_flag, find_pcap_interface, find_pnet_interface, get_interface_ipv4};
-use crate::observer::{capture::capture_packets, scanner::arp_scan};
-use crate::transfer::message::send_event;
-use crate::types::{
-    CapturedEvent, HostEntry, PeerEvent, PeerInfo, PeerPayload, SessionKey, SessionStats,
-};
+use tokio::sync::broadcast;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub store: Store,
+    pub observer: ObserverStore,
+    pub transfer: TransferStore,
     pub channels: Channels,
     pub flags: Flags,
     pub identity: Identity,
@@ -34,7 +40,7 @@ pub struct AppState {
 
 impl AppState {
     pub async fn find_peer_by_name(&self, name: &str) -> Option<PeerInfo> {
-        let peers = self.store.peers.read().await;
+        let peers = self.transfer.peers.read().await;
         peers.values().find(|p| p.name == name).cloned()
     }
 
@@ -66,26 +72,31 @@ impl Identity {
     }
 }
 
-#[derive(Clone)]
-pub struct PendingTransfer {
-    pub filename: String,
-    pub data: Vec<u8>,
+#[derive(Clone, Serialize)]
+pub enum ApiEvent {
+    Transport(TransportPacket),
+    Arp(ArpPacket),
+    Peer(PeerEvent),
 }
 
-#[derive(Clone)]
-pub struct Store {
-    pub events: Arc<RwLock<VecDeque<CapturedEvent>>>,
-    pub hosts: Arc<RwLock<HashMap<Ipv4Addr, HostEntry>>>,
-    pub sessions: Arc<RwLock<HashMap<SessionKey, SessionStats>>>,
-    pub peers: Arc<RwLock<HashMap<Ipv4Addr, PeerInfo>>>,
-    pub messages: Arc<RwLock<HashMap<PeerInfo, Vec<PeerEvent>>>>,
-    pub pending_transfer: Arc<RwLock<HashMap<Uuid, PendingTransfer>>>,
+impl From<ObserverEvent> for ApiEvent {
+    fn from(event: ObserverEvent) -> Self {
+        match event {
+            ObserverEvent::Arp(packet) => Self::Arp(packet),
+            ObserverEvent::Transport(packet) => Self::Transport(packet),
+        }
+    }
+}
+impl From<PeerEvent> for ApiEvent {
+    fn from(event: PeerEvent) -> Self {
+        ApiEvent::Peer(event)
+    }
 }
 
 #[derive(Clone)]
 pub struct Channels {
-    pub internal_tx: tokio::sync::mpsc::Sender<CapturedEvent>,
-    pub external_tx: broadcast::Sender<CapturedEvent>,
+    pub observer_tx: tokio::sync::mpsc::Sender<ObserverEvent>,
+    pub api_tx: broadcast::Sender<ApiEvent>,
 }
 
 #[derive(Clone)]
@@ -107,11 +118,11 @@ pub struct ScanRequest {
 }
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    let rx = state.channels.external_tx.subscribe();
+    let rx = state.channels.api_tx.subscribe();
     ws.on_upgrade(move |socket| handle_socket(socket, rx))
 }
 
-async fn handle_socket(mut socket: WebSocket, mut rx: broadcast::Receiver<CapturedEvent>) {
+async fn handle_socket(mut socket: WebSocket, mut rx: broadcast::Receiver<ApiEvent>) {
     loop {
         match rx.recv().await {
             Ok(event) => {
@@ -137,7 +148,7 @@ pub async fn start_capture(
 ) -> Result<StatusCode, StatusCode> {
     let running = state.flags.capture.clone();
 
-    let packet_tx = state.channels.internal_tx.clone();
+    let packet_tx = state.channels.observer_tx.clone();
     let device = find_pcap_interface(&req.interface).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     change_flag(&running)?;
@@ -180,29 +191,29 @@ pub async fn stop_scan(State(state): State<AppState>) {
     state.flags.scan.store(false, Ordering::Relaxed);
 }
 
-pub async fn get_packets(State(state): State<AppState>) -> Json<VecDeque<CapturedEvent>> {
-    let buf = state.store.events.read().await;
+pub async fn get_packets(State(state): State<AppState>) -> Json<VecDeque<ObserverEvent>> {
+    let buf = state.observer.events.read().await;
     Json(buf.clone())
 }
 
 pub async fn get_hosts(State(state): State<AppState>) -> Json<Vec<HostEntry>> {
-    let table = state.store.hosts.read().await;
+    let table = state.observer.hosts.read().await;
     Json(table.values().cloned().collect())
 }
 
 pub async fn get_sessions(State(state): State<AppState>) -> Json<Vec<(SessionKey, SessionStats)>> {
-    let map = state.store.sessions.read().await;
+    let map = state.observer.sessions.read().await;
     let mut sessions: Vec<_> = map.iter().map(|(k, v)| (*k, *v)).collect();
     sessions.sort_by_key(|(_, v)| std::cmp::Reverse(v.bytes_total));
     Json(sessions)
 }
 
 pub async fn get_peers(State(state): State<AppState>) -> Json<Vec<PeerInfo>> {
-    let map = state.store.peers.read().await;
+    let map = state.transfer.peers.read().await;
     Json(map.values().cloned().collect())
 }
 
 pub async fn get_messages(State(state): State<AppState>) -> Json<Vec<(PeerInfo, Vec<PeerEvent>)>> {
-    let map = state.store.messages.read().await;
+    let map = state.transfer.messages.read().await;
     Json(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
 }

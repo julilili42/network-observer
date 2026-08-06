@@ -1,11 +1,8 @@
-use crate::{
-    api::Store,
-    types::{
-        ArpPacket, CapturedEvent, FilePayload, HostEntry, PeerEvent, PeerPayload, SessionKey,
-        SessionStats, TransportPacket,
-    },
+use crate::api::ApiEvent;
+use crate::observer::types::{
+    ArpPacket, HostEntry, ObserverEvent, ObserverStore, SessionKey, SessionStats, TransportPacket,
 };
-use std::{collections::HashMap, net::Ipv4Addr, path::Path};
+use std::{collections::HashMap, net::Ipv4Addr};
 extern crate pnet;
 use tokio::sync::{broadcast, mpsc};
 
@@ -51,12 +48,7 @@ fn accumulate_arp(arp_table: &mut HashMap<Ipv4Addr, HostEntry>, packet: &ArpPack
     );
 }
 
-// do not add messages to event buffer
-fn should_buffer(event: &CapturedEvent) -> bool {
-    matches!(event, CapturedEvent::Transport(_) | CapturedEvent::Arp(_))
-}
-
-async fn handle_transport(store: &Store, packet: &TransportPacket) {
+async fn handle_transport(store: &ObserverStore, packet: &TransportPacket) {
     let session_map = &mut store.sessions.write().await;
     accumulate_stats(
         session_map,
@@ -70,75 +62,37 @@ async fn handle_transport(store: &Store, packet: &TransportPacket) {
     );
 }
 
-async fn handle_arp(store: &Store, packet: &ArpPacket) {
+async fn handle_arp(store: &ObserverStore, packet: &ArpPacket) {
     let table = &mut store.hosts.write().await;
     accumulate_arp(table, packet);
 }
 
-async fn handle_peer_event(store: &Store, event: &PeerEvent) {
-    match &event.payload {
-        PeerPayload::Message(_) => {
-            let mut messages = store.messages.write().await;
-            messages
-                .entry(event.from.clone())
-                .or_default()
-                .push(event.clone());
-        }
-        PeerPayload::File(FilePayload::Data { filename, data, .. }) => {
-            save_file(filename, data).await;
-        }
-        _ => {}
-    }
-}
-
-async fn save_file(filename: &str, data: &[u8]) {
-    if let Err(e) = tokio::fs::create_dir_all("downloads").await {
-        tracing::error!(error=%e, "failed to create download dir");
-        return;
-    }
-
-    let safe_name = Path::new(filename)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown file");
-
-    let path = format!("downloads/{}", safe_name);
-
-    match tokio::fs::write(&path, data).await {
-        Ok(_) => tracing::info!(filename = %safe_name, "File saved to downloads/"),
-        Err(e) => tracing::error!(error = %e, "failed to write file"),
-    }
-}
-
-async fn handle_event(store: &Store, event: &CapturedEvent) {
+async fn handle_event(store: &ObserverStore, event: &ObserverEvent) {
     match event {
-        CapturedEvent::Transport(packet) => handle_transport(store, packet).await,
-        CapturedEvent::Arp(packet) => handle_arp(store, packet).await,
-        CapturedEvent::Peer(peer_event) => handle_peer_event(store, peer_event).await,
+        ObserverEvent::Transport(packet) => handle_transport(store, packet).await,
+        ObserverEvent::Arp(packet) => handle_arp(store, packet).await,
     }
 }
 
-pub fn spawn_event_processing(
-    store: Store,
-    mut internal_rx: mpsc::Receiver<CapturedEvent>,
-    external_tx: broadcast::Sender<CapturedEvent>,
+pub fn spawn_observer_processing(
+    store: ObserverStore,
+    mut observer_rx: mpsc::Receiver<ObserverEvent>,
+    api_tx: broadcast::Sender<ApiEvent>,
 ) {
     tokio::spawn(async move {
-        while let Some(event) = internal_rx.recv().await {
-            // save captured events
-            if should_buffer(&event) {
-                let mut buf = store.events.write().await;
-                buf.push_back(event.clone());
-                if buf.len() > 1000 {
-                    buf.pop_front();
-                }
+        while let Some(event) = observer_rx.recv().await {
+            let mut events = store.events.write().await;
+            events.push_back(event.clone());
+            if events.len() > 1000 {
+                events.pop_front();
             }
+            drop(events);
 
             // process captured events
             handle_event(&store, &event).await;
 
             // Captured event -> Broadcast channel -> Websocket
-            let _ = external_tx.send(event);
+            let _ = api_tx.send(event.into());
         }
     });
 }

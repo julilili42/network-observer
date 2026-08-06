@@ -1,10 +1,10 @@
-use crate::types::{ArpOperation, ArpPacket, CapturedEvent, TransportPacket, TransportProtocol};
+use super::types::{ArpOperation, ArpPacket, ObserverEvent, TransportPacket, TransportProtocol};
 use etherparse::{ArpPacketSlice, Ipv4Slice, NetSlice, SlicedPacket, TransportSlice};
 use oui_data::lookup;
 use std::net::Ipv4Addr;
 extern crate pnet;
 
-pub fn parse_packet(captured_packet: &[u8]) -> Option<CapturedEvent> {
+pub fn parse_packet(captured_packet: &[u8]) -> Option<ObserverEvent> {
     let sliced = SlicedPacket::from_ethernet(captured_packet).ok()?;
     let packet_len = captured_packet.len();
     match (sliced.net, sliced.transport) {
@@ -16,7 +16,7 @@ pub fn parse_packet(captured_packet: &[u8]) -> Option<CapturedEvent> {
     }
 }
 
-fn parse_arp_packet(arp: ArpPacketSlice) -> Option<CapturedEvent> {
+fn parse_arp_packet(arp: ArpPacketSlice) -> Option<ObserverEvent> {
     let (sender_bytes, target_bytes): ([u8; 4], [u8; 4]) = (
         arp.sender_protocol_addr().try_into().unwrap(),
         arp.target_protocol_addr().try_into().unwrap(),
@@ -29,7 +29,7 @@ fn parse_arp_packet(arp: ArpPacketSlice) -> Option<CapturedEvent> {
     let operation = ArpOperation::from(arp.operation());
     let (oui, org) = oui_lookup(operation, sender_mac);
 
-    Some(CapturedEvent::Arp(ArpPacket {
+    Some(ObserverEvent::Arp(ArpPacket {
         sender_ip,
         sender_mac,
         target_ip,
@@ -44,7 +44,7 @@ fn parse_flow(
     ipv4_slice: Ipv4Slice,
     transport_slice: TransportSlice,
     packet_len: usize,
-) -> Option<CapturedEvent> {
+) -> Option<ObserverEvent> {
     let (src_ip, dst_ip) = (
         Ipv4Addr::from(ipv4_slice.header().source()),
         Ipv4Addr::from(ipv4_slice.header().destination()),
@@ -64,7 +64,7 @@ fn parse_flow(
         _ => return None,
     };
 
-    Some(CapturedEvent::Transport(TransportPacket {
+    Some(ObserverEvent::Transport(TransportPacket {
         src_ip,
         src_port,
         dst_ip,

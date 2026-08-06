@@ -5,10 +5,8 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{
-    api::AppState,
-    types::{CapturedEvent, FilePayload, MessagePayload, PeerEvent, PeerInfo, PeerPayload},
-};
+use super::types::{FilePayload, MessagePayload, PeerEvent, PeerInfo, PeerPayload};
+use crate::{api::AppState, transfer::processing::handle_peer_event};
 
 #[derive(Deserialize)]
 pub struct SendMessageRequest {
@@ -24,7 +22,7 @@ pub async fn handle_outgoing_message(
 
     // lookup recipient info from name
     let recipient: Option<PeerInfo> = {
-        let peers = state.store.peers.read().await;
+        let peers = state.transfer.peers.read().await;
         peers.values().find(|p| p.name == req.name).cloned()
     };
 
@@ -39,7 +37,7 @@ pub async fn handle_outgoing_message(
     };
 
     // save outgoing message event
-    let mut messages = state.store.messages.write().await;
+    let mut messages = state.transfer.messages.write().await;
     let from = sender.clone();
     let payload_store = PeerPayload::Message(MessagePayload {
         content: req.content.clone(),
@@ -90,6 +88,7 @@ pub async fn handle_incoming(
 ) -> StatusCode {
     tracing::debug!(sender = %event.from, "Incoming peer event");
 
+    handle_peer_event(&state.transfer, &event).await;
     // side effect: peer accepted file offer -> send file
     if let PeerPayload::File(FilePayload::Accept { transfer_id }) = event.payload {
         let recipient = event.from.clone();
@@ -99,11 +98,7 @@ pub async fn handle_incoming(
     }
 
     // send message to event_processing -> sends it to ws
-    let _ = state
-        .channels
-        .internal_tx
-        .send(CapturedEvent::Peer(event))
-        .await;
+    let _ = state.channels.api_tx.send(event.into());
 
     StatusCode::OK
 }
@@ -112,7 +107,7 @@ async fn send_pending_file(state: AppState, transfer_id: Uuid, recipient: PeerIn
     let state_clone = state.clone();
 
     let transfer = {
-        let mut transfers = state.store.pending_transfer.write().await;
+        let mut transfers = state.transfer.pending.write().await;
         transfers.remove(&transfer_id)
     };
 
@@ -138,12 +133,7 @@ async fn send_pending_file(state: AppState, transfer_id: Uuid, recipient: PeerIn
 
     send_event(state_clone, recipient.ip, recipient.port, &event).await;
 
-    state
-        .store
-        .pending_transfer
-        .write()
-        .await
-        .remove(&transfer_id);
+    state.transfer.pending.write().await.remove(&transfer_id);
 
     tracing::info!(transfer_id=%transfer_id, "file sent successfully");
 }

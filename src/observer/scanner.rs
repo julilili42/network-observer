@@ -21,7 +21,7 @@ use pnet::{
     util::MacAddr,
 };
 
-use crate::types::ScanError;
+use super::types::ScanError;
 
 fn construct_ethernet_frame<'a>(
     buffer: &'a mut [u8],

@@ -3,10 +3,8 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    api::{AppState, PendingTransfer},
-    types::{FileMeta, FilePayload, PeerPayload},
-};
+use super::types::{FileMeta, FilePayload, PeerPayload, PendingTransfer};
+use crate::api::AppState;
 
 #[derive(Serialize, Deserialize)]
 pub struct OutgoingFileOffer {
@@ -33,7 +31,7 @@ pub async fn handle_outgoing_file_offer(
     tracing::info!(%transfer_id, "created transfer");
     let size_bytes = req.data.len() as u64;
 
-    state.store.pending_transfer.write().await.insert(
+    state.transfer.pending.write().await.insert(
         transfer_id,
         PendingTransfer {
             filename: req.file_name.clone(),

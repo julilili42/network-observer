@@ -1,21 +1,22 @@
 mod api;
 mod helper;
 mod observer;
-mod processing;
 mod transfer;
-mod types;
 
 extern crate pnet;
 use crate::api::{
-    AppState, Identity, get_hosts, get_messages, get_packets, get_sessions, start_capture,
-    start_scan, stop_capture, stop_scan, ws_handler,
+    ApiEvent, AppState, Identity, get_hosts, get_messages, get_packets, get_sessions,
+    start_capture, start_scan, stop_capture, stop_scan, ws_handler,
 };
-use crate::api::{Channels, Flags, Store, get_peers};
+use crate::api::{Channels, Flags, get_peers};
 use crate::helper::{find_pnet_interface, get_interface_ipv4};
-use crate::processing::spawn_event_processing;
+use crate::observer::processing::spawn_observer_processing;
+use crate::observer::types::ObserverStore;
 use crate::transfer::file_transfer::{
     handle_outgoing_file_accept, handle_outgoing_file_offer, handle_outgoing_file_reject,
 };
+
+use crate::transfer::types::TransferStore;
 use crate::transfer::{
     mdns::start_mdns,
     message::{handle_incoming, handle_outgoing_message},
@@ -35,10 +36,10 @@ use std::{
 };
 use tokio::sync::{RwLock, broadcast};
 use tower_http::cors::{Any, CorsLayer};
-use types::CapturedEvent;
 
 fn build_app(
-    store: Store,
+    observer: ObserverStore,
+    transfer: TransferStore,
     channels: Channels,
     flags: Flags,
     identity: Identity,
@@ -70,7 +71,8 @@ fn build_app(
         .route("/ws", get(ws_handler))
         .layer(cors)
         .with_state(AppState {
-            store,
+            observer,
+            transfer,
             channels,
             flags,
             identity,
@@ -78,21 +80,19 @@ fn build_app(
         })
 }
 
-fn build_store() -> Store {
-    let events = Arc::new(RwLock::new(VecDeque::new()));
-    let hosts = Arc::new(RwLock::new(HashMap::new()));
-    let sessions = Arc::new(RwLock::new(HashMap::new()));
-    let peers = Arc::new(RwLock::new(HashMap::new()));
-    let messages = Arc::new(RwLock::new(HashMap::new()));
-    let pending_transfer = Arc::new(RwLock::new(HashMap::new()));
+fn build_observer_store() -> ObserverStore {
+    ObserverStore {
+        events: Arc::new(RwLock::new(VecDeque::new())),
+        hosts: Arc::new(RwLock::new(HashMap::new())),
+        sessions: Arc::new(RwLock::new(HashMap::new())),
+    }
+}
 
-    Store {
-        events,
-        hosts,
-        sessions,
-        peers,
-        messages,
-        pending_transfer,
+fn build_transfer_store() -> TransferStore {
+    TransferStore {
+        peers: Arc::new(RwLock::new(HashMap::new())),
+        messages: Arc::new(RwLock::new(HashMap::new())),
+        pending: Arc::new(RwLock::new(HashMap::new())),
     }
 }
 
@@ -133,17 +133,10 @@ async fn main() {
         .expect("Failed to install ring crypto provider");
 
     // external_tx is 1:n sender of last 100 captured events > used for websocket > client connected to ws receives external_rx
-    let (external_tx, _) = broadcast::channel::<CapturedEvent>(100);
-
-    let external_tx_clone = external_tx.clone();
+    let (api_tx, _) = broadcast::channel::<ApiEvent>(100);
 
     // currently bounded to 1000 captured events > when processing falls behind > capturing thread is blocked
-    let (internal_tx, internal_rx) = tokio::sync::mpsc::channel(1000);
-
-    let channels = Channels {
-        internal_tx,
-        external_tx,
-    };
+    let (observer_tx, observer_rx) = tokio::sync::mpsc::channel(1000);
 
     // thread save variables
     let capture = Arc::new(AtomicBool::new(false));
@@ -170,23 +163,36 @@ async fn main() {
 
     let identity = build_identity(port, device_name).expect("Failed to build identity");
 
-    let store = build_store();
-    let store_clone = store.clone();
+    let observer_store = build_observer_store();
+    let transfer_store = build_transfer_store();
 
     // start multicast dns discovery > name resolver in localnet
     let _ = start_mdns(
         identity.name.clone(),
         identity.ip,
         identity.port,
-        store.peers.clone(),
+        transfer_store.peers.clone(),
     );
     tracing::info!("Started mdns");
 
     // start processing thread of captured events
-    spawn_event_processing(store_clone, internal_rx, external_tx_clone);
+    spawn_observer_processing(observer_store.clone(), observer_rx, api_tx.clone());
+
     tracing::info!("Started event processing");
 
-    let app = build_app(store, channels, flags, identity, http);
+    let channels = Channels {
+        api_tx,
+        observer_tx,
+    };
+
+    let app = build_app(
+        observer_store,
+        transfer_store,
+        channels,
+        flags,
+        identity,
+        http,
+    );
 
     start_server(app, port, tls_identity).await;
 }

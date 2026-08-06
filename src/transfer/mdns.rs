@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::types::PeerInfo;
+use super::types::PeerInfo;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use tokio::sync::RwLock;
 
