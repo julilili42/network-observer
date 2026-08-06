@@ -3,8 +3,9 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::types::{FileMeta, FilePayload, PeerPayload, PendingTransfer};
 use crate::api::AppState;
+
+use super::types::{FileMeta, FilePayload, PeerPayload, PendingTransfer};
 
 #[derive(Serialize, Deserialize)]
 pub struct OutgoingFileOffer {

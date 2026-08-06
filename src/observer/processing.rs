@@ -1,6 +1,9 @@
-use crate::api::ApiEvent;
-use crate::observer::types::{
-    ArpPacket, HostEntry, ObserverEvent, ObserverStore, SessionKey, SessionStats, TransportPacket,
+use crate::{
+    api::ApiEvent,
+    observer::types::{
+        ArpPacket, HostEntry, ObserverEvent, ObserverStore, SessionKey, SessionStats,
+        TransportPacket,
+    },
 };
 use std::{collections::HashMap, net::Ipv4Addr};
 extern crate pnet;

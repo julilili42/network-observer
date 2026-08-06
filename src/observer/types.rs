@@ -4,7 +4,7 @@ use std::{
     collections::{HashMap, VecDeque},
     hash::Hash,
     net::Ipv4Addr,
-    sync::Arc,
+    sync::{Arc, atomic::AtomicBool},
 };
 use tokio::sync::RwLock;
 
@@ -27,6 +27,12 @@ pub struct ObserverStore {
     pub events: Arc<RwLock<VecDeque<ObserverEvent>>>,
     pub hosts: Arc<RwLock<HashMap<Ipv4Addr, HostEntry>>>,
     pub sessions: Arc<RwLock<HashMap<SessionKey, SessionStats>>>,
+}
+
+#[derive(Clone)]
+pub struct Flags {
+    pub capture_running: Arc<AtomicBool>,
+    pub scan_running: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -4,19 +4,20 @@ mod observer;
 mod transfer;
 
 extern crate pnet;
-use crate::api::{
-    ApiEvent, AppState, Identity, get_hosts, get_messages, get_packets, get_sessions,
-    start_capture, start_scan, stop_capture, stop_scan, ws_handler,
+use crate::api::observer::{
+    get_hosts, get_packets, get_sessions, start_capture, start_scan, stop_capture, stop_scan,
 };
-use crate::api::{Channels, Flags, get_peers};
+use crate::api::transfer::{get_messages, get_peers};
+use crate::api::ws::ws_handler;
+use crate::api::{ApiEvent, AppState, Channels};
 use crate::helper::{find_pnet_interface, get_interface_ipv4};
 use crate::observer::processing::spawn_observer_processing;
-use crate::observer::types::ObserverStore;
+use crate::observer::types::{Flags, ObserverStore};
 use crate::transfer::file_transfer::{
     handle_outgoing_file_accept, handle_outgoing_file_offer, handle_outgoing_file_reject,
 };
 
-use crate::transfer::types::TransferStore;
+use crate::transfer::types::{Identity, TransferStore};
 use crate::transfer::{
     mdns::start_mdns,
     message::{handle_incoming, handle_outgoing_message},
@@ -37,14 +38,7 @@ use std::{
 use tokio::sync::{RwLock, broadcast};
 use tower_http::cors::{Any, CorsLayer};
 
-fn build_app(
-    observer: ObserverStore,
-    transfer: TransferStore,
-    channels: Channels,
-    flags: Flags,
-    identity: Identity,
-    http: reqwest::Client,
-) -> Router {
+fn build_app(state: AppState) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
@@ -70,14 +64,7 @@ fn build_app(
         .route("/hosts", get(get_hosts))
         .route("/ws", get(ws_handler))
         .layer(cors)
-        .with_state(AppState {
-            observer,
-            transfer,
-            channels,
-            flags,
-            identity,
-            http,
-        })
+        .with_state(state)
 }
 
 fn build_observer_store() -> ObserverStore {
@@ -139,10 +126,13 @@ async fn main() {
     let (observer_tx, observer_rx) = tokio::sync::mpsc::channel(1000);
 
     // thread save variables
-    let capture = Arc::new(AtomicBool::new(false));
-    let scan = Arc::new(AtomicBool::new(false));
+    let capture_running = Arc::new(AtomicBool::new(false));
+    let scan_running = Arc::new(AtomicBool::new(false));
 
-    let flags = Flags { capture, scan };
+    let flags = Flags {
+        capture_running,
+        scan_running,
+    };
 
     // port variable is set via environment variable
     let port: u16 = std::env::var("PORT")
@@ -185,14 +175,14 @@ async fn main() {
         observer_tx,
     };
 
-    let app = build_app(
-        observer_store,
-        transfer_store,
+    let app = build_app(AppState {
+        observer: observer_store,
+        transfer: transfer_store,
         channels,
-        flags,
         identity,
+        flags,
         http,
-    );
+    });
 
     start_server(app, port, tls_identity).await;
 }

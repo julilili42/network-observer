@@ -5,6 +5,23 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 #[derive(Clone)]
+pub struct Identity {
+    pub name: String,
+    pub ip: Ipv4Addr,
+    pub port: u16,
+}
+
+impl Identity {
+    pub fn as_peer(&self) -> PeerInfo {
+        PeerInfo {
+            name: self.name.clone(),
+            ip: self.ip,
+            port: self.port,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct TransferStore {
     pub peers: Arc<RwLock<HashMap<Ipv4Addr, PeerInfo>>>,
     pub messages: Arc<RwLock<HashMap<PeerInfo, Vec<PeerEvent>>>>,
