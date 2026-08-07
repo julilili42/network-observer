@@ -1,38 +1,36 @@
-mod api;
-mod helper;
-mod observer;
-mod transfer;
-
 extern crate pnet;
-use crate::api::observer::{
-    get_hosts, get_packets, get_sessions, start_capture, start_scan, stop_capture, stop_scan,
-};
-use crate::api::transfer::{get_messages, get_peers};
-use crate::api::ws::ws_handler;
-use crate::api::{ApiEvent, AppState, Channels};
-use crate::helper::{find_pnet_interface, get_interface_ipv4};
-use crate::observer::processing::spawn_observer_processing;
-use crate::observer::types::{Flags, ObserverStore};
-use crate::transfer::file_transfer::{
-    handle_outgoing_file_accept, handle_outgoing_file_offer, handle_outgoing_file_reject,
-};
 
-use crate::transfer::types::{Identity, TransferStore};
-use crate::transfer::{
-    mdns::start_mdns,
-    message::{handle_incoming, handle_outgoing_message},
-    tls,
-};
-use axum::http::{Method, header};
 use axum::{
     Router,
+    http::{Method, header},
     routing::{get, post},
 };
 use axum_server::tls_rustls::RustlsConfig;
+use network_sniffer::api::{
+    ApiEvent, AppState, Channels,
+    observer::{
+        get_hosts, get_packets, get_sessions, start_capture, start_scan, stop_capture, stop_scan,
+    },
+    transfer::{
+        get_messages, get_peers, handle_incoming, handle_outgoing_file_accept,
+        handle_outgoing_file_offer, handle_outgoing_file_reject, handle_outgoing_message,
+    },
+    ws::ws_handler,
+};
+use network_sniffer::observer::{
+    interface::{find_pnet_interface, get_interface_ipv4},
+    processing::spawn_observer_processing,
+    types::{Flags, ObserverStore},
+};
+use network_sniffer::transfer::{
+    mdns::start_mdns,
+    tls,
+    types::{Identity, TransferStore},
+};
 use rustls::crypto;
-use std::net::Ipv4Addr;
 use std::{
     collections::{HashMap, VecDeque},
+    net::Ipv4Addr,
     sync::{Arc, atomic::AtomicBool},
 };
 use tokio::sync::{RwLock, broadcast};

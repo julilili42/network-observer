@@ -2,7 +2,9 @@ use crate::api::AppState;
 use crate::observer::types::{HostEntry, SessionKey, SessionStats};
 use crate::observer::{capture::capture_packets, scanner::arp_scan};
 use crate::{
-    helper::{change_flag, find_pcap_interface, find_pnet_interface, get_interface_ipv4},
+    observer::interface::{
+        change_flag, find_pcap_interface, find_pnet_interface, get_interface_ipv4,
+    },
     observer::types::ObserverEvent,
 };
 use axum::{

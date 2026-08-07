@@ -1,77 +1,13 @@
 use std::net::Ipv4Addr;
 
-use axum::{Json, extract::State};
-use reqwest::StatusCode;
-use serde::Deserialize;
+use reqwest::Client;
 use uuid::Uuid;
 
-use super::types::{FilePayload, MessagePayload, PeerEvent, PeerInfo, PeerPayload};
-use crate::{api::AppState, transfer::processing::handle_peer_event};
+use super::types::{FilePayload, PeerEvent, PeerInfo, PeerPayload};
+use crate::transfer::types::{Identity, TransferStore};
 
-#[derive(Deserialize)]
-pub struct SendMessageRequest {
-    pub name: String,
-    pub content: String,
-}
-
-pub async fn handle_outgoing_message(
-    State(state): State<AppState>,
-    Json(req): Json<SendMessageRequest>,
-) -> StatusCode {
-    let state_clone = state.clone();
-
-    // lookup recipient info from name
-    let recipient: Option<PeerInfo> = {
-        let peers = state.transfer.peers.read().await;
-        peers.values().find(|p| p.name == req.name).cloned()
-    };
-
-    let Some(recipient) = recipient else {
-        return StatusCode::NOT_FOUND;
-    };
-
-    let sender = PeerInfo {
-        name: state.identity.name,
-        ip: state.identity.ip,
-        port: state.identity.port,
-    };
-
-    // save outgoing message event
-    let mut messages = state.transfer.messages.write().await;
-    let from = sender.clone();
-    let payload_store = PeerPayload::Message(MessagePayload {
-        content: req.content.clone(),
-        outgoing: true,
-    });
-
-    messages
-        .entry(recipient.clone())
-        .or_default()
-        .push(PeerEvent {
-            from: from.clone(),
-            payload: payload_store,
-        });
-
-    // send message to peer
-    // false from receiver perspective
-    let payload_send = PeerPayload::Message(MessagePayload {
-        content: req.content,
-        outgoing: false,
-    });
-
-    let event = &PeerEvent {
-        from,
-        payload: payload_send,
-    };
-
-    send_event(state_clone, recipient.ip, recipient.port, event).await;
-
-    StatusCode::OK
-}
-
-pub async fn send_event(state: AppState, ip: Ipv4Addr, port: u16, event: &PeerEvent) {
-    let res = state
-        .http
+pub async fn send_event(http: &Client, ip: Ipv4Addr, port: u16, event: &PeerEvent) {
+    let res = http
         .post(format!("https://{}:{}/peers/incoming", ip, port))
         .json(event)
         .send()
@@ -82,32 +18,15 @@ pub async fn send_event(state: AppState, ip: Ipv4Addr, port: u16, event: &PeerEv
     }
 }
 
-pub async fn handle_incoming(
-    State(state): State<AppState>,
-    Json(event): Json<PeerEvent>,
-) -> StatusCode {
-    tracing::debug!(sender = %event.from, "Incoming peer event");
-
-    handle_peer_event(&state.transfer, &event).await;
-    // side effect: peer accepted file offer -> send file
-    if let PeerPayload::File(FilePayload::Accept { transfer_id }) = event.payload {
-        let recipient = event.from.clone();
-        let state_clone = state.clone();
-
-        tokio::spawn(async move { send_pending_file(state_clone, transfer_id, recipient).await });
-    }
-
-    // send message to event_processing -> sends it to ws
-    let _ = state.channels.api_tx.send(event.into());
-
-    StatusCode::OK
-}
-
-async fn send_pending_file(state: AppState, transfer_id: Uuid, recipient: PeerInfo) {
-    let state_clone = state.clone();
-
+pub async fn send_pending_file(
+    identity: Identity,
+    transfer_store: &TransferStore,
+    http: &Client,
+    transfer_id: Uuid,
+    recipient: PeerInfo,
+) {
     let transfer = {
-        let mut transfers = state.transfer.pending.write().await;
+        let mut transfers = transfer_store.pending.write().await;
         transfers.remove(&transfer_id)
     };
 
@@ -117,9 +36,9 @@ async fn send_pending_file(state: AppState, transfer_id: Uuid, recipient: PeerIn
     };
 
     let sender = PeerInfo {
-        name: state.identity.name,
-        ip: state.identity.ip,
-        port: state.identity.port,
+        name: identity.name,
+        ip: identity.ip,
+        port: identity.port,
     };
 
     let event = PeerEvent {
@@ -131,9 +50,7 @@ async fn send_pending_file(state: AppState, transfer_id: Uuid, recipient: PeerIn
         }),
     };
 
-    send_event(state_clone, recipient.ip, recipient.port, &event).await;
-
-    state.transfer.pending.write().await.remove(&transfer_id);
+    send_event(http, recipient.ip, recipient.port, &event).await;
 
     tracing::info!(transfer_id=%transfer_id, "file sent successfully");
 }

@@ -36,7 +36,7 @@ impl AppState {
             payload,
         };
 
-        send_event(self.clone(), peer.ip, peer.port, &event).await;
+        send_event(&self.http, peer.ip, peer.port, &event).await;
         StatusCode::OK
     }
 }
