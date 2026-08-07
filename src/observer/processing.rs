@@ -1,13 +1,9 @@
-use crate::{
-    api::types::ApiEvent,
-    observer::types::{
-        ArpPacket, HostEntry, ObserverEvent, ObserverStore, SessionKey, SessionStats,
-        TransportPacket,
-    },
+use crate::observer::types::{
+    ArpPacket, HostEntry, ObserverEvent, ObserverStore, SessionKey, SessionStats, TransportPacket,
 };
 use std::{collections::HashMap, net::Ipv4Addr};
 extern crate pnet;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 
 fn normalize_session(session: SessionKey) -> SessionKey {
     if (session.a_ip, session.a_port) < (session.b_ip, session.b_port) {
@@ -80,7 +76,7 @@ async fn handle_event(store: &ObserverStore, event: &ObserverEvent) {
 pub fn spawn_observer_processing(
     store: ObserverStore,
     mut observer_rx: mpsc::Receiver<ObserverEvent>,
-    api_tx: broadcast::Sender<ApiEvent>,
+    publish: impl Fn(ObserverEvent) + Send + 'static,
 ) {
     tokio::spawn(async move {
         while let Some(event) = observer_rx.recv().await {
@@ -94,8 +90,7 @@ pub fn spawn_observer_processing(
             // process captured events
             handle_event(&store, &event).await;
 
-            // Captured event -> Broadcast channel -> Websocket
-            let _ = api_tx.send(event.into());
+            publish(event)
         }
     });
 }

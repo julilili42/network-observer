@@ -163,8 +163,11 @@ async fn main() {
     );
     tracing::info!("Started mdns");
 
+    let api_tx_clone = api_tx.clone();
     // start processing thread of captured events
-    spawn_observer_processing(observer_store.clone(), observer_rx, api_tx.clone());
+    spawn_observer_processing(observer_store.clone(), observer_rx, move |event| {
+        let _ = api_tx_clone.send(event.into());
+    });
 
     tracing::info!("Started event processing");
 
