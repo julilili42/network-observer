@@ -1,14 +1,15 @@
 use crate::observer::types::{Flags, ObserverEvent};
-use crate::transfer::message::send_event;
-use crate::transfer::types::{Identity, PeerEvent, PeerInfo, PeerPayload, TransferError};
+use crate::transfer::types::{Identity, PeerEvent, TransferError};
 use crate::{
     observer::types::{ArpPacket, ObserverStore, TransportPacket},
     transfer::types::TransferStore,
 };
 use axum::http::StatusCode;
 use reqwest::Client;
+use serde::Deserialize;
 use serde::Serialize;
 use tokio::sync::broadcast;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -18,25 +19,6 @@ pub struct AppState {
     pub identity: Identity,
     pub flags: Flags,
     pub http: Client,
-}
-
-impl AppState {
-    pub async fn find_peer_by_name(&self, name: &str) -> Option<PeerInfo> {
-        let peers = self.transfer.peers.read().await;
-        peers.values().find(|p| p.name == name).cloned()
-    }
-
-    pub async fn send_to(&self, peer: &PeerInfo, payload: PeerPayload) -> StatusCode {
-        let event = PeerEvent {
-            from: self.identity.as_peer(),
-            payload,
-        };
-
-        if let Err(error) = send_event(&self.http, peer.ip, peer.port, &event).await {
-            return TransferError::SendFail(error).into();
-        }
-        StatusCode::OK
-    }
 }
 
 #[derive(Clone)]
@@ -76,4 +58,23 @@ impl From<TransferError> for StatusCode {
             }
         }
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OutgoingFileOffer {
+    pub recipient_name: String,
+    pub file_name: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AcceptRejectRequest {
+    pub transfer_id: Uuid,
+    pub from_name: String,
+}
+
+#[derive(Deserialize)]
+pub struct SendMessageRequest {
+    pub name: String,
+    pub content: String,
 }

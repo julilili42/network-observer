@@ -1,5 +1,7 @@
+use crate::api::types::{AcceptRejectRequest, OutgoingFileOffer, SendMessageRequest};
+use crate::transfer::file::{accept_file, offer_file, reject_file};
 use crate::transfer::message::send_message;
-use crate::transfer::types::{FileMeta, FilePayload, PeerPayload, PendingTransfer};
+use crate::transfer::types::{FilePayload, PeerPayload};
 use crate::{
     api::types::AppState,
     transfer::{
@@ -10,21 +12,6 @@ use crate::{
 };
 use axum::{Json, extract::State};
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
-#[derive(Serialize, Deserialize)]
-pub struct OutgoingFileOffer {
-    pub recipient_name: String,
-    pub file_name: String,
-    pub data: Vec<u8>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AcceptRejectRequest {
-    pub transfer_id: Uuid,
-    pub from_name: String,
-}
 
 pub async fn get_peers(State(state): State<AppState>) -> Json<Vec<PeerInfo>> {
     let map = state.transfer.peers.read().await;
@@ -40,67 +27,55 @@ pub async fn handle_outgoing_file_offer(
     State(state): State<AppState>,
     Json(req): Json<OutgoingFileOffer>,
 ) -> StatusCode {
-    let Some(recipient) = state.find_peer_by_name(&req.recipient_name).await else {
-        return StatusCode::NOT_FOUND;
-    };
-
-    let transfer_id = Uuid::new_v4();
-    tracing::info!(%transfer_id, "created transfer");
-    let size_bytes = req.data.len() as u64;
-
-    state.transfer.pending.write().await.insert(
-        transfer_id,
-        PendingTransfer {
-            filename: req.file_name.clone(),
-            data: req.data,
-        },
-    );
-
-    let payload = PeerPayload::File(FilePayload::Offer {
-        meta: FileMeta {
-            transfer_id,
-            filename: req.file_name,
-            size_byte: size_bytes,
-        },
-    });
-
-    state.send_to(&recipient, payload).await
+    match offer_file(
+        &req.recipient_name,
+        &req.file_name,
+        req.data,
+        &state.transfer,
+        &state.identity,
+        &state.http,
+    )
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(e) => e.into(),
+    }
 }
 
 pub async fn handle_outgoing_file_accept(
     State(state): State<AppState>,
     Json(req): Json<AcceptRejectRequest>,
 ) -> StatusCode {
-    let Some(sender) = state.find_peer_by_name(&req.from_name).await else {
-        return StatusCode::NOT_FOUND;
-    };
-
-    let payload = PeerPayload::File(FilePayload::Accept {
-        transfer_id: req.transfer_id,
-    });
-
-    state.send_to(&sender, payload).await
+    match accept_file(
+        &req.from_name,
+        req.transfer_id,
+        &state.transfer,
+        &state.identity,
+        &state.http,
+    )
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(e) => e.into(),
+    }
 }
 
 pub async fn handle_outgoing_file_reject(
     State(state): State<AppState>,
     Json(req): Json<AcceptRejectRequest>,
 ) -> StatusCode {
-    let Some(sender) = state.find_peer_by_name(&req.from_name).await else {
-        return StatusCode::NOT_FOUND;
-    };
-
-    let payload = PeerPayload::File(FilePayload::Reject {
-        transfer_id: req.transfer_id,
-    });
-
-    state.send_to(&sender, payload).await
-}
-
-#[derive(Deserialize)]
-pub struct SendMessageRequest {
-    pub name: String,
-    pub content: String,
+    match reject_file(
+        &req.from_name,
+        req.transfer_id,
+        &state.transfer,
+        &state.identity,
+        &state.http,
+    )
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(e) => e.into(),
+    }
 }
 
 pub async fn handle_outgoing_message(
