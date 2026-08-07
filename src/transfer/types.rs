@@ -4,6 +4,32 @@ use std::{collections::HashMap, hash::Hash, net::Ipv4Addr, sync::Arc};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+#[derive(Debug)]
+pub enum TransferError {
+    PeerNotFound,
+    SendFail(reqwest::Error),
+    NoPending,
+}
+
+impl fmt::Display for TransferError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TransferError::PeerNotFound => write!(f, "peer not found"),
+            TransferError::SendFail(e) => write!(f, "send fail: {}", e),
+            TransferError::NoPending => write!(f, "no pending transfer"),
+        }
+    }
+}
+
+impl std::error::Error for TransferError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            TransferError::SendFail(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Identity {
     pub name: String,

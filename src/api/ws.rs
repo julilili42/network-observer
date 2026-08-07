@@ -5,7 +5,7 @@ use axum::{
 };
 use tokio::sync::broadcast;
 
-use crate::api::{ApiEvent, AppState};
+use crate::api::types::{ApiEvent, AppState};
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     let rx = state.channels.api_tx.subscribe();

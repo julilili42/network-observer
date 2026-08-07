@@ -1,4 +1,4 @@
-use crate::api::AppState;
+use crate::api::types::AppState;
 use crate::observer::types::{HostEntry, SessionKey, SessionStats};
 use crate::observer::{capture::capture_packets, scanner::arp_scan};
 use crate::{

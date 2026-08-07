@@ -1,5 +1,5 @@
 use crate::{
-    api::ApiEvent,
+    api::types::ApiEvent,
     observer::types::{
         ArpPacket, HostEntry, ObserverEvent, ObserverStore, SessionKey, SessionStats,
         TransportPacket,

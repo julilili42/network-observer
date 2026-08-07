@@ -1,27 +1,17 @@
-use crate::transfer::message::send_event;
+use crate::transfer::message::send_message;
 use crate::transfer::types::{FileMeta, FilePayload, PeerPayload, PendingTransfer};
 use crate::{
-    api::AppState,
+    api::types::AppState,
     transfer::{
         message::send_pending_file,
         processing::handle_peer_event,
-        types::{MessagePayload, PeerEvent, PeerInfo},
+        types::{PeerEvent, PeerInfo},
     },
 };
 use axum::{Json, extract::State};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-pub async fn get_peers(State(state): State<AppState>) -> Json<Vec<PeerInfo>> {
-    let map = state.transfer.peers.read().await;
-    Json(map.values().cloned().collect())
-}
-
-pub async fn get_messages(State(state): State<AppState>) -> Json<Vec<(PeerInfo, Vec<PeerEvent>)>> {
-    let map = state.transfer.messages.read().await;
-    Json(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct OutgoingFileOffer {
@@ -34,6 +24,16 @@ pub struct OutgoingFileOffer {
 pub struct AcceptRejectRequest {
     pub transfer_id: Uuid,
     pub from_name: String,
+}
+
+pub async fn get_peers(State(state): State<AppState>) -> Json<Vec<PeerInfo>> {
+    let map = state.transfer.peers.read().await;
+    Json(map.values().cloned().collect())
+}
+
+pub async fn get_messages(State(state): State<AppState>) -> Json<Vec<(PeerInfo, Vec<PeerEvent>)>> {
+    let map = state.transfer.messages.read().await;
+    Json(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
 }
 
 pub async fn handle_outgoing_file_offer(
@@ -107,53 +107,18 @@ pub async fn handle_outgoing_message(
     State(state): State<AppState>,
     Json(req): Json<SendMessageRequest>,
 ) -> StatusCode {
-    // lookup recipient info from name
-    let recipient: Option<PeerInfo> = {
-        let peers = state.transfer.peers.read().await;
-        peers.values().find(|p| p.name == req.name).cloned()
-    };
-
-    let Some(recipient) = recipient else {
-        return StatusCode::NOT_FOUND;
-    };
-
-    let sender = PeerInfo {
-        name: state.identity.name,
-        ip: state.identity.ip,
-        port: state.identity.port,
-    };
-
-    // save outgoing message event
-    let mut messages = state.transfer.messages.write().await;
-    let from = sender.clone();
-    let payload_store = PeerPayload::Message(MessagePayload {
-        content: req.content.clone(),
-        outgoing: true,
-    });
-
-    messages
-        .entry(recipient.clone())
-        .or_default()
-        .push(PeerEvent {
-            from: from.clone(),
-            payload: payload_store,
-        });
-
-    // send message to peer
-    // false from receiver perspective
-    let payload_send = PeerPayload::Message(MessagePayload {
-        content: req.content,
-        outgoing: false,
-    });
-
-    let event = &PeerEvent {
-        from,
-        payload: payload_send,
-    };
-
-    send_event(&state.http, recipient.ip, recipient.port, event).await;
-
-    StatusCode::OK
+    match send_message(
+        &state.identity,
+        &state.transfer,
+        &state.http,
+        &req.name,
+        &req.content,
+    )
+    .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(e) => e.into(),
+    }
 }
 
 pub async fn handle_incoming(

@@ -7,7 +7,6 @@ use axum::{
 };
 use axum_server::tls_rustls::RustlsConfig;
 use network_sniffer::api::{
-    ApiEvent, AppState, Channels,
     observer::{
         get_hosts, get_packets, get_sessions, start_capture, start_scan, stop_capture, stop_scan,
     },
@@ -15,6 +14,7 @@ use network_sniffer::api::{
         get_messages, get_peers, handle_incoming, handle_outgoing_file_accept,
         handle_outgoing_file_offer, handle_outgoing_file_reject, handle_outgoing_message,
     },
+    types::{ApiEvent, AppState, Channels},
     ws::ws_handler,
 };
 use network_sniffer::observer::{
