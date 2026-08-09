@@ -5,10 +5,21 @@ use axum::{
 };
 use tokio::sync::broadcast;
 
-use crate::api::types::{ApiEvent, AppState};
+use crate::api::types::{ApiEvent, ObserverState, TransferState};
 
-pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+pub async fn ws_handler_observer(
+    ws: WebSocketUpgrade,
+    State(state): State<ObserverState>,
+) -> impl IntoResponse {
     let rx = state.channels.api_tx.subscribe();
+    ws.on_upgrade(move |socket| handle_socket(socket, rx))
+}
+
+pub async fn ws_handler_transfer(
+    ws: WebSocketUpgrade,
+    State(state): State<TransferState>,
+) -> impl IntoResponse {
+    let rx = state.api_tx.subscribe();
     ws.on_upgrade(move |socket| handle_socket(socket, rx))
 }
 

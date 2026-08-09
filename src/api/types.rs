@@ -12,12 +12,17 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 #[derive(Clone)]
-pub struct AppState {
-    pub observer: ObserverStore,
-    pub transfer: TransferStore,
+pub struct ObserverState {
+    pub store: ObserverStore,
     pub channels: Channels,
-    pub identity: Identity,
     pub flags: Flags,
+}
+
+#[derive(Clone)]
+pub struct TransferState {
+    pub store: TransferStore,
+    pub api_tx: broadcast::Sender<ApiEvent>,
+    pub identity: Identity,
     pub http: Client,
 }
 

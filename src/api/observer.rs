@@ -1,4 +1,4 @@
-use crate::api::types::AppState;
+use crate::api::types::ObserverState;
 use crate::observer::types::{HostEntry, SessionKey, SessionStats};
 use crate::observer::{capture::capture_packets, scanner::arp_scan};
 use crate::{
@@ -27,7 +27,7 @@ pub struct ScanRequest {
 }
 
 pub async fn start_capture(
-    State(state): State<AppState>,
+    State(state): State<ObserverState>,
     Json(req): Json<CaptureRequest>,
 ) -> Result<StatusCode, StatusCode> {
     let running = state.flags.capture_running.clone();
@@ -48,7 +48,7 @@ pub async fn start_capture(
 }
 
 pub async fn start_scan(
-    State(state): State<AppState>,
+    State(state): State<ObserverState>,
     Json(req): Json<ScanRequest>,
 ) -> Result<StatusCode, StatusCode> {
     let running = state.flags.scan_running.clone();
@@ -67,26 +67,28 @@ pub async fn start_scan(
     Ok(StatusCode::OK)
 }
 
-pub async fn stop_capture(State(state): State<AppState>) {
+pub async fn stop_capture(State(state): State<ObserverState>) {
     state.flags.capture_running.store(false, Ordering::Relaxed);
 }
 
-pub async fn stop_scan(State(state): State<AppState>) {
+pub async fn stop_scan(State(state): State<ObserverState>) {
     state.flags.scan_running.store(false, Ordering::Relaxed);
 }
 
-pub async fn get_packets(State(state): State<AppState>) -> Json<VecDeque<ObserverEvent>> {
-    let buf = state.observer.events.read().await;
+pub async fn get_packets(State(state): State<ObserverState>) -> Json<VecDeque<ObserverEvent>> {
+    let buf = state.store.events.read().await;
     Json(buf.clone())
 }
 
-pub async fn get_hosts(State(state): State<AppState>) -> Json<Vec<HostEntry>> {
-    let table = state.observer.hosts.read().await;
+pub async fn get_hosts(State(state): State<ObserverState>) -> Json<Vec<HostEntry>> {
+    let table = state.store.hosts.read().await;
     Json(table.values().cloned().collect())
 }
 
-pub async fn get_sessions(State(state): State<AppState>) -> Json<Vec<(SessionKey, SessionStats)>> {
-    let map = state.observer.sessions.read().await;
+pub async fn get_sessions(
+    State(state): State<ObserverState>,
+) -> Json<Vec<(SessionKey, SessionStats)>> {
+    let map = state.store.sessions.read().await;
     let mut sessions: Vec<_> = map.iter().map(|(k, v)| (*k, *v)).collect();
     sessions.sort_by_key(|(_, v)| std::cmp::Reverse(v.bytes_total));
     Json(sessions)

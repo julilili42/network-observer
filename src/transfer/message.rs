@@ -11,7 +11,7 @@ pub async fn send_event(
     port: u16,
     event: &PeerEvent,
 ) -> Result<(), reqwest::Error> {
-    let url = format!("https://{}:{}/peers/incoming", ip, port);
+    let url = format!("https://{}:{}/incoming", ip, port);
 
     http.post(url)
         .json(event)
