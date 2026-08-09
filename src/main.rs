@@ -155,12 +155,13 @@ async fn main() {
     let transfer_store = build_transfer_store();
 
     // start multicast dns discovery > name resolver in localnet
-    let _ = start_mdns(
+    let _mdns = start_mdns(
         identity.name.clone(),
         identity.ip,
         identity.port,
         transfer_store.peers.clone(),
-    );
+    )
+    .expect("Failed to start mdns");
     tracing::info!("Started mdns");
 
     let api_tx_clone = api_tx.clone();
