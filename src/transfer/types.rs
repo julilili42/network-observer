@@ -1,7 +1,7 @@
 use core::fmt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, hash::Hash, net::Ipv4Addr, sync::Arc};
-use tokio::sync::RwLock;
+use tokio::{io, sync::RwLock};
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -9,6 +9,7 @@ pub enum TransferError {
     PeerNotFound,
     SendFail(reqwest::Error),
     NoPending,
+    IoFailed(io::Error),
 }
 
 impl fmt::Display for TransferError {
@@ -17,6 +18,7 @@ impl fmt::Display for TransferError {
             TransferError::PeerNotFound => write!(f, "peer not found"),
             TransferError::SendFail(e) => write!(f, "send fail: {}", e),
             TransferError::NoPending => write!(f, "no pending transfer"),
+            TransferError::IoFailed(e) => write!(f, "io operation failed: {}", e),
         }
     }
 }
@@ -25,6 +27,7 @@ impl std::error::Error for TransferError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             TransferError::SendFail(e) => Some(e),
+            TransferError::IoFailed(e) => Some(e),
             _ => None,
         }
     }

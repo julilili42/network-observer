@@ -27,7 +27,7 @@ pub async fn send_pending_file(
     transfer_store: &TransferStore,
     http: &Client,
     transfer_id: Uuid,
-    recipient: PeerInfo,
+    recipient: &PeerInfo,
 ) -> Result<(), TransferError> {
     let transfer = {
         let mut transfers = transfer_store.pending.write().await;

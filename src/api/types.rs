@@ -57,9 +57,13 @@ impl From<TransferError> for StatusCode {
     fn from(error: TransferError) -> Self {
         match error {
             TransferError::NoPending | TransferError::PeerNotFound => StatusCode::NOT_FOUND,
-            TransferError::SendFail(error) => {
-                tracing::error!(%error, "transfer failed");
+            TransferError::SendFail(e) => {
+                tracing::error!(%e, "transfer failed");
                 StatusCode::BAD_GATEWAY
+            }
+            TransferError::IoFailed(e) => {
+                tracing::error!(%e, "transfer failed");
+                StatusCode::INTERNAL_SERVER_ERROR
             }
         }
     }

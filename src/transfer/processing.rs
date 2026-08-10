@@ -1,8 +1,24 @@
+use crate::transfer::{
+    message::send_pending_file,
+    types::{
+        FilePayload, Identity, PeerEvent, PeerInfo, PeerPayload, TransferError, TransferStore,
+    },
+};
+use reqwest::Client;
+use std::io::ErrorKind;
 use std::path::Path;
+use tokio::{
+    fs::{self, OpenOptions},
+    io::{self, AsyncWriteExt},
+};
 
-use crate::transfer::types::{FilePayload, PeerEvent, PeerPayload, TransferStore};
-
-pub async fn handle_peer_event(store: &TransferStore, event: &PeerEvent) {
+pub async fn handle_peer_event(
+    store: &TransferStore,
+    event: &PeerEvent,
+    http: &Client,
+    identity: Identity,
+    recipient: &PeerInfo,
+) -> Result<(), TransferError> {
     match &event.payload {
         PeerPayload::Message(_) => {
             let mut messages = store.messages.write().await;
@@ -10,29 +26,41 @@ pub async fn handle_peer_event(store: &TransferStore, event: &PeerEvent) {
                 .entry(event.from.clone())
                 .or_default()
                 .push(event.clone());
+            Ok(())
         }
         PeerPayload::File(FilePayload::Data { filename, data, .. }) => {
-            save_file(filename, data).await;
+            save_file(filename, Path::new("downloads/"), data)
+                .await
+                .map_err(TransferError::IoFailed)
         }
-        _ => {}
+        PeerPayload::File(FilePayload::Accept { transfer_id }) => {
+            send_pending_file(identity, store, http, *transfer_id, recipient).await
+        }
+        _ => Ok(()),
     }
 }
 
-async fn save_file(filename: &str, data: &[u8]) {
-    if let Err(e) = tokio::fs::create_dir_all("downloads").await {
-        tracing::error!(error=%e, "failed to create download dir");
-        return;
-    }
+async fn save_file(file_name: &str, dir_path: &Path, data: &[u8]) -> Result<(), io::Error> {
+    fs::create_dir_all(dir_path).await?;
 
-    let safe_name = Path::new(filename)
+    let safe_name = Path::new(file_name)
         .file_name()
         .and_then(|n| n.to_str())
-        .unwrap_or("unknown file");
+        .ok_or(io::Error::new(
+            ErrorKind::InvalidFilename,
+            "invalid filename",
+        ))?;
 
-    let path = format!("downloads/{}", safe_name);
+    let path = dir_path.join(safe_name);
 
-    match tokio::fs::write(&path, data).await {
-        Ok(_) => tracing::info!(filename = %safe_name, "File saved to downloads/"),
-        Err(e) => tracing::error!(error = %e, "failed to write file"),
-    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .await?;
+
+    file.write_all(data).await?;
+    tracing::info!(file_name = %file_name, "File saved to {:?}", dir_path);
+
+    Ok(())
 }

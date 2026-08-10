@@ -1,11 +1,9 @@
 use crate::api::types::{AcceptRejectRequest, OutgoingFileOffer, SendMessageRequest};
 use crate::transfer::file::{accept_file, offer_file, reject_file};
 use crate::transfer::message::send_message;
-use crate::transfer::types::{FilePayload, PeerPayload};
 use crate::{
     api::types::TransferState,
     transfer::{
-        message::send_pending_file,
         processing::handle_peer_event,
         types::{PeerEvent, PeerInfo},
     },
@@ -104,21 +102,16 @@ pub async fn handle_incoming(
 ) -> StatusCode {
     tracing::debug!(sender = %event.from, "Incoming peer event");
 
-    handle_peer_event(&state.store, &event).await;
-    // side effect: peer accepted file offer -> send file
-    if let PeerPayload::File(FilePayload::Accept { transfer_id }) = event.payload {
-        let recipient = event.from.clone();
-
-        tokio::spawn(async move {
-            send_pending_file(
-                state.identity,
-                &state.store,
-                &state.http,
-                transfer_id,
-                recipient,
-            )
-            .await
-        });
+    if let Err(e) = handle_peer_event(
+        &state.store,
+        &event,
+        &state.http,
+        state.identity,
+        &event.from,
+    )
+    .await
+    {
+        return e.into();
     }
 
     // send message to event_processing -> sends it to ws
