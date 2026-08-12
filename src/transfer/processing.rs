@@ -1,8 +1,8 @@
 use crate::transfer::{
     message::send_pending_file,
     types::{
-        FilePayload, Identity, Message, PeerEvent, PeerInfo, PeerPayload, Transfer,
-        TransferDirection, TransferError, TransferStatus, TransferStore,
+        FilePayload, Message, PeerEvent, PeerInfo, PeerPayload, Store, Transfer, TransferDirection,
+        TransferError, TransferStatus,
     },
 };
 use reqwest::Client;
@@ -14,10 +14,10 @@ use tokio::{
 };
 
 pub async fn handle_peer_event(
-    transfer_store: &TransferStore,
+    transfer_store: &Store,
     event: &PeerEvent,
     http: &Client,
-    identity: Identity,
+    identity: PeerInfo,
 ) -> Result<(), TransferError> {
     let sender = event.from.clone();
     match &event.payload {
@@ -32,7 +32,7 @@ pub async fn handle_peer_event(
 
 pub async fn handle_message_event(
     message: &Message,
-    transfer_store: &TransferStore,
+    transfer_store: &Store,
     sender: PeerInfo,
 ) -> Result<(), TransferError> {
     let mut messages = transfer_store.messages.write().await;
@@ -45,10 +45,10 @@ pub async fn handle_message_event(
 
 pub async fn handle_file_event(
     file: &FilePayload,
-    transfer_store: &TransferStore,
+    transfer_store: &Store,
     sender: PeerInfo,
     http: &Client,
-    identity: Identity,
+    identity: PeerInfo,
 ) -> Result<(), TransferError> {
     match file {
         FilePayload::Accept { transfer_id } => {
@@ -139,7 +139,6 @@ pub async fn handle_file_event(
             transfer.status = TransferStatus::Rejected;
             Ok(())
         }
-        FilePayload::Complete { meta: _ } => Ok(()),
     }
 }
 

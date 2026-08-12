@@ -1,8 +1,8 @@
 use crate::observer::types::{Flags, ObserverEvent};
-use crate::transfer::types::{Identity, PeerEvent, TransferError};
+use crate::transfer::types::{PeerEvent, PeerInfo, TransferError};
 use crate::{
     observer::types::{ArpPacket, ObserverStore, TransportPacket},
-    transfer::types::TransferStore,
+    transfer::types::Store,
 };
 use axum::http::StatusCode;
 use reqwest::Client;
@@ -20,9 +20,9 @@ pub struct ObserverState {
 
 #[derive(Clone)]
 pub struct TransferState {
-    pub store: TransferStore,
+    pub store: Store,
     pub api_tx: broadcast::Sender<ApiEvent>,
-    pub identity: Identity,
+    pub identity: PeerInfo,
     pub http: Client,
 }
 

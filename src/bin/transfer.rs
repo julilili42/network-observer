@@ -18,7 +18,7 @@ use network_sniffer::{
     transfer::{
         mdns::start_mdns,
         tls,
-        types::{Identity, TransferStore},
+        types::{PeerInfo, Store},
     },
 };
 use reqwest::{Method, header};
@@ -44,19 +44,19 @@ fn build_transfer_app(state: TransferState) -> Router {
         .with_state(state)
 }
 
-fn build_identity(port: u16, device_name: String) -> Option<Identity> {
+fn build_identity(port: u16, device_name: String) -> Option<PeerInfo> {
     let interface_name = std::env::var("INTERFACE").unwrap_or_else(|_| "en0".into());
     let interface = find_pnet_interface(&interface_name)?;
 
-    Some(Identity {
+    Some(PeerInfo {
         name: device_name,
         ip: get_interface_ipv4(&interface).unwrap_or(Ipv4Addr::UNSPECIFIED),
         port,
     })
 }
 
-fn build_transfer_store() -> TransferStore {
-    TransferStore {
+fn build_transfer_store() -> Store {
+    Store {
         peers: Arc::new(RwLock::new(HashMap::new())),
         messages: Arc::new(RwLock::new(HashMap::new())),
         transfers: Arc::new(RwLock::new(HashMap::new())),

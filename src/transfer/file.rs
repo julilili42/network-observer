@@ -6,15 +6,12 @@ use uuid::Uuid;
 use crate::transfer::{
     message::send_event,
     types::{
-        FileMeta, FilePayload, Identity, PeerEvent, PeerInfo, PeerPayload, Transfer,
-        TransferDirection, TransferError, TransferStatus, TransferStore,
+        FileMeta, FilePayload, PeerEvent, PeerInfo, PeerPayload, Store, Transfer,
+        TransferDirection, TransferError, TransferStatus,
     },
 };
 
-pub async fn find_peer_by_name(
-    transfer_store: &TransferStore,
-    recipient_name: &str,
-) -> Option<PeerInfo> {
+pub async fn find_peer_by_name(transfer_store: &Store, recipient_name: &str) -> Option<PeerInfo> {
     let peers = transfer_store.peers.read().await;
     peers.values().find(|p| p.name == recipient_name).cloned()
 }
@@ -22,8 +19,8 @@ pub async fn find_peer_by_name(
 pub async fn offer_transfer(
     peer: PeerInfo,
     path: PathBuf,
-    transfer_store: &TransferStore,
-    identity: &Identity,
+    transfer_store: &Store,
+    identity: &PeerInfo,
     http: &Client,
 ) -> Result<Uuid, TransferError> {
     let transfer_id = Uuid::new_v4();
@@ -56,7 +53,7 @@ pub async fn offer_transfer(
     }
 
     let event = PeerEvent {
-        from: identity.as_peer(),
+        from: identity.clone(),
         payload: PeerPayload::File(FilePayload::Offer {
             meta: transfer.meta,
         }),
@@ -80,8 +77,8 @@ pub async fn offer_transfer(
 
 pub async fn reject_transfer(
     transfer_id: Uuid,
-    transfer_store: &TransferStore,
-    identity: &Identity,
+    transfer_store: &Store,
+    identity: &PeerInfo,
     http: &Client,
 ) -> Result<Uuid, TransferError> {
     tracing::info!(%transfer_id, "rejecting transfer");
@@ -98,7 +95,7 @@ pub async fn reject_transfer(
     let payload = PeerPayload::File(FilePayload::Reject { transfer_id });
 
     let event = PeerEvent {
-        from: identity.as_peer(),
+        from: identity.clone(),
         payload,
     };
 
@@ -116,8 +113,8 @@ pub async fn reject_transfer(
 
 pub async fn accept_transfer(
     transfer_id: Uuid,
-    transfer_store: &TransferStore,
-    identity: &Identity,
+    transfer_store: &Store,
+    identity: &PeerInfo,
     http: &Client,
 ) -> Result<Uuid, TransferError> {
     tracing::info!(%transfer_id, "accepting transfer");
@@ -135,7 +132,7 @@ pub async fn accept_transfer(
     let payload = PeerPayload::File(FilePayload::Accept { transfer_id });
 
     let event = PeerEvent {
-        from: identity.as_peer(),
+        from: identity.clone(),
         payload,
     };
 

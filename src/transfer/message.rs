@@ -1,9 +1,7 @@
 use std::net::Ipv4Addr;
 
 use super::types::{FilePayload, PeerEvent, PeerInfo, PeerPayload};
-use crate::transfer::types::{
-    Identity, Message, TransferDirection, TransferError, TransferStatus, TransferStore,
-};
+use crate::transfer::types::{Message, Store, TransferDirection, TransferError, TransferStatus};
 use reqwest::Client;
 use uuid::Uuid;
 
@@ -26,22 +24,17 @@ pub async fn send_event(
 
 pub async fn send_pending_file(
     transfer_id: Uuid,
-    transfer_store: &TransferStore,
-    identity: Identity,
+    transfer_store: &Store,
+    identity: PeerInfo,
     http: &Client,
 ) -> Result<(), TransferError> {
-    let (ip, port, filename, path) = {
+    let (ip, port, path) = {
         let mut transfer_map = transfer_store.transfers.write().await;
         let Some(transfer) = transfer_map.get_mut(&transfer_id) else {
             return Err(TransferError::TransferNotFound);
         };
         transfer.status = TransferStatus::Transferring;
-        (
-            transfer.peer.ip,
-            transfer.peer.port,
-            transfer.meta.filename.clone(),
-            transfer.path.clone(),
-        )
+        (transfer.peer.ip, transfer.peer.port, transfer.path.clone())
     };
 
     let result: Result<(), TransferError> = async {
@@ -50,12 +43,8 @@ pub async fn send_pending_file(
             .map_err(TransferError::IoFailed)?;
 
         let event = PeerEvent {
-            from: identity.as_peer(),
-            payload: PeerPayload::File(FilePayload::Data {
-                transfer_id,
-                filename,
-                data,
-            }),
+            from: identity.clone(),
+            payload: PeerPayload::File(FilePayload::Data { transfer_id, data }),
         };
 
         send_event(http, ip, port, &event)
@@ -77,8 +66,8 @@ pub async fn send_pending_file(
 }
 
 pub async fn send_message(
-    identity: &Identity,
-    transfer_store: &TransferStore,
+    identity: &PeerInfo,
+    transfer_store: &Store,
     http: &Client,
     req_name: &str,
     req_content: &str,
