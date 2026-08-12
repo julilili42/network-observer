@@ -1,5 +1,5 @@
-use crate::api::types::{AcceptRejectRequest, OutgoingFileOffer, SendMessageRequest};
-use crate::transfer::file::{accept_file, offer_file, reject_file};
+use crate::api::types::{AcceptRejectRequest, SendMessageRequest};
+use crate::transfer::file::{accept_transfer, reject_transfer};
 use crate::transfer::message::send_message;
 use crate::{
     api::types::TransferState,
@@ -23,38 +23,11 @@ pub async fn get_messages(
     Json(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
 }
 
-pub async fn handle_outgoing_file_offer(
-    State(state): State<TransferState>,
-    Json(req): Json<OutgoingFileOffer>,
-) -> StatusCode {
-    match offer_file(
-        &req.recipient_name,
-        &req.file_name,
-        req.data,
-        &state.store,
-        &state.identity,
-        &state.http,
-    )
-    .await
-    {
-        Ok(_) => StatusCode::OK,
-        Err(e) => e.into(),
-    }
-}
-
 pub async fn handle_outgoing_file_accept(
     State(state): State<TransferState>,
     Json(req): Json<AcceptRejectRequest>,
 ) -> StatusCode {
-    match accept_file(
-        &req.from_name,
-        req.transfer_id,
-        &state.store,
-        &state.identity,
-        &state.http,
-    )
-    .await
-    {
+    match accept_transfer(req.transfer_id, &state.store, &state.identity, &state.http).await {
         Ok(_) => StatusCode::OK,
         Err(e) => e.into(),
     }
@@ -64,15 +37,7 @@ pub async fn handle_outgoing_file_reject(
     State(state): State<TransferState>,
     Json(req): Json<AcceptRejectRequest>,
 ) -> StatusCode {
-    match reject_file(
-        &req.from_name,
-        req.transfer_id,
-        &state.store,
-        &state.identity,
-        &state.http,
-    )
-    .await
-    {
+    match reject_transfer(req.transfer_id, &state.store, &state.identity, &state.http).await {
         Ok(_) => StatusCode::OK,
         Err(e) => e.into(),
     }
@@ -102,15 +67,7 @@ pub async fn handle_incoming(
 ) -> StatusCode {
     tracing::debug!(sender = %event.from, "Incoming peer event");
 
-    if let Err(e) = handle_peer_event(
-        &state.store,
-        &event,
-        &state.http,
-        state.identity,
-        &event.from,
-    )
-    .await
-    {
+    if let Err(e) = handle_peer_event(&state.store, &event, &state.http, state.identity).await {
         return e.into();
     }
 

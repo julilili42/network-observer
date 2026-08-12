@@ -1,7 +1,8 @@
 use crate::transfer::{
     message::send_pending_file,
     types::{
-        FilePayload, Identity, PeerEvent, PeerInfo, PeerPayload, TransferError, TransferStore,
+        FilePayload, Identity, PeerEvent, PeerPayload, Transfer, TransferDirection, TransferError,
+        TransferStatus, TransferStore,
     },
 };
 use reqwest::Client;
@@ -13,29 +14,109 @@ use tokio::{
 };
 
 pub async fn handle_peer_event(
-    store: &TransferStore,
+    transfer_store: &TransferStore,
     event: &PeerEvent,
     http: &Client,
     identity: Identity,
-    recipient: &PeerInfo,
 ) -> Result<(), TransferError> {
     match &event.payload {
         PeerPayload::Message(_) => {
-            let mut messages = store.messages.write().await;
+            let mut messages = transfer_store.messages.write().await;
             messages
                 .entry(event.from.clone())
                 .or_default()
                 .push(event.clone());
             Ok(())
         }
-        PeerPayload::File(FilePayload::Data { filename, data, .. }) => {
-            save_file(filename, Path::new("downloads/"), data)
+        PeerPayload::File(FilePayload::Data {
+            transfer_id, data, ..
+        }) => {
+            let filename = {
+                let mut transfers = transfer_store.transfers.write().await;
+                let transfer = transfers
+                    .get_mut(&transfer_id)
+                    .ok_or(TransferError::TransferNotFound)?;
+
+                if transfer.direction != TransferDirection::Incoming
+                    || transfer.status != TransferStatus::Accepted
+                    || transfer.peer != event.from
+                {
+                    return Err(TransferError::InvalidTransferState);
+                }
+
+                transfer.status = TransferStatus::Transferring;
+                transfer.meta.filename.clone()
+            };
+
+            let result = save_file(filename.as_str(), Path::new("downloads/"), data)
                 .await
-                .map_err(TransferError::IoFailed)
+                .map_err(TransferError::IoFailed);
+
+            if let Some(transfer) = transfer_store.transfers.write().await.get_mut(transfer_id) {
+                transfer.status = match &result {
+                    Ok(()) => TransferStatus::Completed,
+                    Err(e) => TransferStatus::Failed(e.to_string()),
+                }
+            }
+
+            result
+        }
+        PeerPayload::File(FilePayload::Offer { meta }) => {
+            let safe_name = Path::new(&meta.filename)
+                .file_name()
+                .ok_or(TransferError::InvalidFileName)?;
+
+            let transfer = Transfer {
+                direction: TransferDirection::Incoming,
+                peer: event.from.clone(),
+                meta: meta.clone(),
+                path: Path::new("downloads").join(safe_name),
+                status: TransferStatus::Offered,
+            };
+
+            transfer_store
+                .transfers
+                .write()
+                .await
+                .entry(meta.transfer_id)
+                .or_insert(transfer);
+
+            Ok(())
         }
         PeerPayload::File(FilePayload::Accept { transfer_id }) => {
-            send_pending_file(identity, store, http, *transfer_id, recipient).await
+            {
+                let mut transfers = transfer_store.transfers.write().await;
+                let transfer = transfers
+                    .get_mut(&transfer_id)
+                    .ok_or(TransferError::TransferNotFound)?;
+
+                if transfer.direction != TransferDirection::Outgoing
+                    || transfer.status != TransferStatus::Offered
+                    || transfer.peer != event.from
+                {
+                    return Err(TransferError::InvalidTransferState);
+                }
+            }
+
+            send_pending_file(*transfer_id, transfer_store, identity, http).await
         }
+        PeerPayload::File(FilePayload::Reject { transfer_id }) => {
+            let mut transfers = transfer_store.transfers.write().await;
+            let transfer = transfers
+                .get_mut(&transfer_id)
+                .ok_or(TransferError::TransferNotFound)?;
+
+            if transfer.direction != TransferDirection::Outgoing
+                || transfer.status != TransferStatus::Offered
+                || transfer.peer != event.from
+            {
+                return Err(TransferError::InvalidTransferState);
+            }
+
+            transfer.status = TransferStatus::Rejected;
+            Ok(())
+        }
+
         _ => Ok(()),
     }
 }

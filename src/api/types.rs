@@ -56,7 +56,10 @@ impl From<PeerEvent> for ApiEvent {
 impl From<TransferError> for StatusCode {
     fn from(error: TransferError) -> Self {
         match error {
-            TransferError::NoPending | TransferError::PeerNotFound => StatusCode::NOT_FOUND,
+            TransferError::PeerNotFound => StatusCode::NOT_FOUND,
+            TransferError::InvalidTransferState => StatusCode::INTERNAL_SERVER_ERROR,
+            TransferError::TransferNotFound => StatusCode::NOT_FOUND,
+            TransferError::InvalidFileName => StatusCode::INTERNAL_SERVER_ERROR,
             TransferError::SendFail(e) => {
                 tracing::error!(%e, "transfer failed");
                 StatusCode::BAD_GATEWAY

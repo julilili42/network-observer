@@ -1,14 +1,40 @@
 use core::fmt;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, hash::Hash, net::Ipv4Addr, sync::Arc};
+use std::{collections::HashMap, hash::Hash, net::Ipv4Addr, path::PathBuf, sync::Arc};
 use tokio::{io, sync::RwLock};
 use uuid::Uuid;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransferStatus {
+    Offered,
+    Accepted,
+    Transferring,
+    Completed,
+    Rejected,
+    Failed(String),
+}
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransferDirection {
+    Incoming,
+    Outgoing,
+}
+
+#[derive(Debug, Clone)]
+pub struct Transfer {
+    pub direction: TransferDirection,
+    pub peer: PeerInfo,
+    pub meta: FileMeta,
+    pub path: PathBuf,
+    pub status: TransferStatus,
+}
 
 #[derive(Debug)]
 pub enum TransferError {
     PeerNotFound,
+    InvalidTransferState,
+    TransferNotFound,
+    InvalidFileName,
     SendFail(reqwest::Error),
-    NoPending,
     IoFailed(io::Error),
 }
 
@@ -16,8 +42,10 @@ impl fmt::Display for TransferError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransferError::PeerNotFound => write!(f, "peer not found"),
+            TransferError::InvalidTransferState => write!(f, "transfer state not valid"),
+            TransferError::TransferNotFound => write!(f, "transfer not found"),
+            TransferError::InvalidFileName => write!(f, "file name not valid"),
             TransferError::SendFail(e) => write!(f, "send fail: {}", e),
-            TransferError::NoPending => write!(f, "no pending transfer"),
             TransferError::IoFailed(e) => write!(f, "io operation failed: {}", e),
         }
     }
@@ -54,7 +82,7 @@ impl Identity {
 pub struct TransferStore {
     pub peers: Arc<RwLock<HashMap<Ipv4Addr, PeerInfo>>>,
     pub messages: Arc<RwLock<HashMap<PeerInfo, Vec<PeerEvent>>>>,
-    pub pending: Arc<RwLock<HashMap<Uuid, PendingTransfer>>>,
+    pub transfers: Arc<RwLock<HashMap<Uuid, Transfer>>>,
 }
 
 #[derive(Clone)]

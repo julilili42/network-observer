@@ -9,7 +9,7 @@ use network_sniffer::{
     api::{
         transfer::{
             get_messages, get_peers, handle_incoming, handle_outgoing_file_accept,
-            handle_outgoing_file_offer, handle_outgoing_file_reject, handle_outgoing_message,
+            handle_outgoing_file_reject, handle_outgoing_message,
         },
         types::{ApiEvent, TransferState},
         ws::ws_handler_transfer,
@@ -38,7 +38,6 @@ fn build_transfer_app(state: TransferState) -> Router {
         .route("/messages", get(get_messages))
         .route("/incoming", post(handle_incoming))
         .route("/outgoing_message", post(handle_outgoing_message))
-        .route("/outgoing_file_offer", post(handle_outgoing_file_offer))
         .route("/outgoing_file_accept", post(handle_outgoing_file_accept))
         .route("/outgoing_file_reject", post(handle_outgoing_file_reject))
         .layer(cors)
@@ -60,7 +59,7 @@ fn build_transfer_store() -> TransferStore {
     TransferStore {
         peers: Arc::new(RwLock::new(HashMap::new())),
         messages: Arc::new(RwLock::new(HashMap::new())),
-        pending: Arc::new(RwLock::new(HashMap::new())),
+        transfers: Arc::new(RwLock::new(HashMap::new())),
     }
 }
 
