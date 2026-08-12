@@ -2,7 +2,7 @@ use std::net::Ipv4Addr;
 
 use super::types::{FilePayload, PeerEvent, PeerInfo, PeerPayload};
 use crate::transfer::types::{
-    Identity, MessagePayload, TransferError, TransferStatus, TransferStore,
+    Identity, Message, TransferDirection, TransferError, TransferStatus, TransferStore,
 };
 use reqwest::Client;
 use uuid::Uuid;
@@ -100,27 +100,23 @@ pub async fn send_message(
     };
 
     let from = sender.clone();
-    let payload_store = PeerPayload::Message(MessagePayload {
-        content: req_content.into(),
-        outgoing: true,
-    });
 
     // save outgoing message event
     let mut messages = transfer_store.messages.write().await;
     messages
         .entry(recipient.clone())
         .or_default()
-        .push(PeerEvent {
-            from: from.clone(),
-            payload: payload_store,
+        .push(Message {
+            content: req_content.into(),
+            direction: TransferDirection::Outgoing,
         });
     drop(messages);
 
     // send message to peer
     // false from receiver perspective
-    let payload_send = PeerPayload::Message(MessagePayload {
+    let payload_send = PeerPayload::Message(Message {
         content: req_content.into(),
-        outgoing: false,
+        direction: TransferDirection::Incoming,
     });
 
     let event = &PeerEvent {

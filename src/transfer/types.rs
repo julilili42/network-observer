@@ -13,10 +13,19 @@ pub enum TransferStatus {
     Rejected,
     Failed(String),
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TransferDirection {
     Incoming,
     Outgoing,
+}
+
+impl fmt::Display for TransferDirection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TransferDirection::Incoming => write!(f, "incoming"),
+            TransferDirection::Outgoing => write!(f, "outgoing"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -81,7 +90,7 @@ impl Identity {
 #[derive(Clone)]
 pub struct TransferStore {
     pub peers: Arc<RwLock<HashMap<Ipv4Addr, PeerInfo>>>,
-    pub messages: Arc<RwLock<HashMap<PeerInfo, Vec<PeerEvent>>>>,
+    pub messages: Arc<RwLock<HashMap<PeerInfo, Vec<Message>>>>,
     pub transfers: Arc<RwLock<HashMap<Uuid, Transfer>>>,
 }
 
@@ -144,25 +153,21 @@ impl fmt::Display for FilePayload {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct MessagePayload {
+pub struct Message {
     pub content: String,
-    pub outgoing: bool,
+    pub direction: TransferDirection,
 }
 
-impl fmt::Display for MessagePayload {
+impl fmt::Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "MESSAGE {:?} (outgoing: {})",
-            self.content, self.outgoing
-        )?;
+        write!(f, "MESSAGE {:?} ({})", self.content, self.direction)?;
         Ok(())
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PeerPayload {
-    Message(MessagePayload),
+    Message(Message),
     File(FilePayload),
 }
 

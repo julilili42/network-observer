@@ -68,14 +68,12 @@ pub async fn offer_transfer(
     let mut transfer_map = transfer_store.transfers.write().await;
 
     match event_result {
-        Ok(_) => {
-            return Ok(transfer_id);
-        }
+        Ok(_) => Ok(transfer_id),
         Err(e) => {
             if let Some(transfer) = transfer_map.get_mut(&transfer_id) {
                 transfer.status = TransferStatus::Failed(e.to_string());
             }
-            return Err(TransferError::SendFail(e));
+            Err(TransferError::SendFail(e))
         }
     }
 }

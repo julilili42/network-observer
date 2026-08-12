@@ -1,6 +1,7 @@
 use crate::api::types::{AcceptRejectRequest, SendMessageRequest};
 use crate::transfer::file::{accept_transfer, reject_transfer};
 use crate::transfer::message::send_message;
+use crate::transfer::types::Message;
 use crate::{
     api::types::TransferState,
     transfer::{
@@ -18,7 +19,7 @@ pub async fn get_peers(State(state): State<TransferState>) -> Json<Vec<PeerInfo>
 
 pub async fn get_messages(
     State(state): State<TransferState>,
-) -> Json<Vec<(PeerInfo, Vec<PeerEvent>)>> {
+) -> Json<Vec<(PeerInfo, Vec<Message>)>> {
     let map = state.store.messages.read().await;
     Json(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
 }
