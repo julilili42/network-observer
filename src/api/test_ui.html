@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transfer test UI</title>
+<style>
+  body { font: 16px system-ui; max-width: 850px; margin: 2rem auto; padding: 0 1rem; }
+  section { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+  input, select, button { font: inherit; padding: .5rem; margin: .25rem; }
+  input { min-width: 280px; } pre { white-space: pre-wrap; }
+</style>
+<h1>Transfer test UI</h1>
+<p id="status">Loading…</p>
+<section>
+  <h2>Send message</h2>
+  <select id="message-peer"></select>
+  <input id="message" placeholder="Message">
+  <button onclick="sendMessage()">Send</button>
+</section>
+<section>
+  <h2>Offer local file</h2>
+  <select id="file-peer"></select>
+  <input id="path" placeholder="Absolute path on this laptop">
+  <button onclick="offerFile()">Offer</button>
+</section>
+<section><h2>Transfers</h2><div id="transfers"></div></section>
+<section><h2>Messages</h2><pre id="messages"></pre></section>
+<script>
+async function request(url, options) {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.headers.get('content-type')?.includes('json') ? response.json() : null;
+}
+async function post(url, body) {
+  await request(url, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body)});
+  await refresh();
+}
+async function sendMessage() {
+  await post('/send_message', {name: document.querySelector('#message-peer').value, content: document.querySelector('#message').value});
+  document.querySelector('#message').value = '';
+}
+async function offerFile() {
+  await post('/outgoing_transfer', {recipient_name: document.querySelector('#file-peer').value, path: document.querySelector('#path').value});
+}
+async function decide(transferId, action) {
+  await post(`/${action}_transfer`, {transfer_id: transferId, from_name: ''});
+}
+function optionList(peers) {
+  return peers.map(peer => `<option value="${peer.name}">${peer.name} (${peer.ip})</option>`).join('');
+}
+async function refresh() {
+  try {
+    const [peers, transfers, messages] = await Promise.all([request('/peers'), request('/transfers'), request('/messages')]);
+    document.querySelector('#message-peer').innerHTML = optionList(peers);
+    document.querySelector('#file-peer').innerHTML = optionList(peers);
+    document.querySelector('#transfers').innerHTML = transfers.map(transfer => {
+      const offered = transfer.direction === 'Incoming' && transfer.status === 'Offered';
+      const buttons = offered ? `<button onclick="decide('${transfer.meta.transfer_id}', 'accept')">Accept</button><button onclick="decide('${transfer.meta.transfer_id}', 'reject')">Reject</button>` : '';
+      return `<p><b>${transfer.meta.filename}</b> from/to ${transfer.peer.name}: ${JSON.stringify(transfer.status)} ${buttons}</p>`;
+    }).join('') || 'No transfers';
+    document.querySelector('#messages').textContent = messages.map(([peer, items]) => `${peer.name}\n${items.map(item => `  ${item.direction}: ${item.content}`).join('\n')}`).join('\n\n') || 'No messages';
+    document.querySelector('#status').textContent = `${peers.length} peer(s) found`;
+  } catch (error) { document.querySelector('#status').textContent = error; }
+}
+refresh();
+setInterval(refresh, 1000);
+</script>
+</html>

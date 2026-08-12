@@ -17,7 +17,7 @@ pub enum PeerPayload {
     File(FilePayload),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum TransferStatus {
     Offered,
     Accepted,
@@ -27,7 +27,7 @@ pub enum TransferStatus {
     Failed(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Transfer {
     pub direction: TransferDirection,
     pub peer: PeerInfo,

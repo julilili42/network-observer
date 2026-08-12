@@ -8,6 +8,7 @@ use axum::http::StatusCode;
 use reqwest::Client;
 use serde::Deserialize;
 use serde::Serialize;
+use std::path::PathBuf;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -72,11 +73,10 @@ impl From<TransferError> for StatusCode {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct OutgoingFileOffer {
+#[derive(Deserialize)]
+pub struct OfferTransferRequest {
     pub recipient_name: String,
-    pub file_name: String,
-    pub data: Vec<u8>,
+    pub path: PathBuf,
 }
 
 #[derive(Serialize, Deserialize)]

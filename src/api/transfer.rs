@@ -1,7 +1,7 @@
-use crate::api::types::{AcceptRejectRequest, SendMessageRequest};
-use crate::transfer::file::{accept_transfer, reject_transfer};
+use crate::api::types::{AcceptRejectRequest, OfferTransferRequest, SendMessageRequest};
+use crate::transfer::file::{accept_transfer, offer_transfer, reject_transfer};
 use crate::transfer::message::send_message;
-use crate::transfer::types::Message;
+use crate::transfer::types::{Message, Transfer};
 use crate::{
     api::types::TransferState,
     transfer::{
@@ -9,12 +9,29 @@ use crate::{
         types::{PeerEvent, PeerInfo},
     },
 };
-use axum::{Json, extract::State};
+use axum::{Json, extract::State, response::Html};
 use reqwest::StatusCode;
 
 pub async fn get_peers(State(state): State<TransferState>) -> Json<Vec<PeerInfo>> {
     let map = state.store.peers.read().await;
     Json(map.values().cloned().collect())
+}
+
+pub async fn get_test_ui() -> Html<&'static str> {
+    Html(include_str!("test_ui.html"))
+}
+
+pub async fn get_transfers(State(state): State<TransferState>) -> Json<Vec<Transfer>> {
+    Json(
+        state
+            .store
+            .transfers
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect(),
+    )
 }
 
 pub async fn get_messages(
@@ -75,4 +92,26 @@ pub async fn handle_peer_events(
     let _ = state.api_tx.send(event.into());
 
     StatusCode::OK
+}
+
+pub async fn handle_offer_transfer(
+    State(state): State<TransferState>,
+    Json(req): Json<OfferTransferRequest>,
+) -> StatusCode {
+    let peer = {
+        let peers = state.store.peers.read().await;
+        peers
+            .values()
+            .find(|peer| peer.name == req.recipient_name)
+            .cloned()
+    };
+
+    let Some(peer) = peer else {
+        return StatusCode::NOT_FOUND;
+    };
+
+    match offer_transfer(peer, req.path, &state.store, &state.identity, &state.http).await {
+        Ok(_) => StatusCode::OK,
+        Err(e) => e.into(),
+    }
 }

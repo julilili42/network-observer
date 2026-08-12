@@ -8,8 +8,8 @@ use axum_server::tls_rustls::RustlsConfig;
 use network_sniffer::{
     api::{
         transfer::{
-            get_messages, get_peers, handle_accept_transfer, handle_peer_events,
-            handle_reject_transfer, handle_send_message,
+            get_messages, get_peers, get_test_ui, get_transfers, handle_accept_transfer,
+            handle_offer_transfer, handle_peer_events, handle_reject_transfer, handle_send_message,
         },
         types::{ApiEvent, TransferState},
         ws::ws_handler_transfer,
@@ -34,13 +34,17 @@ fn build_transfer_app(state: TransferState) -> Router {
         .allow_headers([header::CONTENT_TYPE]);
 
     Router::new()
-        .route("/", get(get_peers))
+        .route("/", get(get_test_ui))
+        .route("/peers", get(get_peers))
         .route("/ws", get(ws_handler_transfer))
         .route("/messages", get(get_messages))
+        .route("/transfers", get(get_transfers))
         .route("/events", post(handle_peer_events))
         .route("/send_message", post(handle_send_message))
         .route("/accept_transfer", post(handle_accept_transfer))
         .route("/reject_transfer", post(handle_reject_transfer))
+        // TEMPORARY: accepts local filesystem paths over the LAN. Remove after manual testing.
+        .route("/outgoing_transfer", post(handle_offer_transfer))
         .layer(cors)
         .with_state(state)
 }
