@@ -18,7 +18,7 @@ pub fn start_mdns(
     Ok(mdns)
 }
 
-pub fn register_service(
+fn register_service(
     mdns: &ServiceDaemon,
     name: String,
     ip: Ipv4Addr,
@@ -56,7 +56,7 @@ async fn resolve_service(
     }
 }
 
-pub fn browse_services(
+fn browse_services(
     mdns: &ServiceDaemon,
     self_name: String,
     self_ip: Ipv4Addr,

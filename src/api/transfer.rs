@@ -5,7 +5,7 @@ use crate::transfer::types::Message;
 use crate::{
     api::types::TransferState,
     transfer::{
-        processing::handle_peer_event,
+        event::handle_peer_event,
         types::{PeerEvent, PeerInfo},
     },
 };
@@ -72,7 +72,6 @@ pub async fn handle_peer_events(
         return e.into();
     }
 
-    // send message to event_processing -> sends it to ws
     let _ = state.api_tx.send(event.into());
 
     StatusCode::OK

@@ -9,14 +9,113 @@ use tokio::{fs, fs::OpenOptions, io::AsyncWriteExt};
 use uuid::Uuid;
 
 use crate::transfer::{
-    message::send_event,
+    event::send_event,
     types::{
         FileMeta, FilePayload, PeerEvent, PeerInfo, PeerPayload, Store, Transfer,
         TransferDirection, TransferError, TransferStatus,
     },
 };
 
-pub async fn save_file(file_name: &str, dir_path: &Path, data: &[u8]) -> Result<(), io::Error> {
+pub async fn handle_file_event(
+    file: &FilePayload,
+    transfer_store: &Store,
+    sender: PeerInfo,
+    http: &Client,
+    identity: PeerInfo,
+) -> Result<(), TransferError> {
+    match file {
+        FilePayload::Offer { meta } => {
+            let safe_name = Path::new(&meta.filename)
+                .file_name()
+                .ok_or(TransferError::InvalidFileName)?;
+
+            let transfer = Transfer {
+                direction: TransferDirection::Incoming,
+                peer: sender.clone(),
+                meta: meta.clone(),
+                path: Path::new("downloads").join(safe_name),
+                status: TransferStatus::Offered,
+            };
+
+            transfer_store
+                .transfers
+                .write()
+                .await
+                .entry(meta.transfer_id)
+                .or_insert(transfer);
+
+            Ok(())
+        }
+        FilePayload::Accept { transfer_id } => {
+            {
+                let mut transfers = transfer_store.transfers.write().await;
+                let transfer = transfers
+                    .get_mut(transfer_id)
+                    .ok_or(TransferError::TransferNotFound)?;
+
+                if transfer.direction != TransferDirection::Outgoing
+                    || transfer.status != TransferStatus::Offered
+                    || transfer.peer != sender
+                {
+                    return Err(TransferError::InvalidTransferState);
+                }
+            }
+
+            send_pending_file(*transfer_id, transfer_store, identity, http).await
+        }
+        FilePayload::Reject { transfer_id } => {
+            let mut transfers = transfer_store.transfers.write().await;
+            let transfer = transfers
+                .get_mut(transfer_id)
+                .ok_or(TransferError::TransferNotFound)?;
+
+            if transfer.direction != TransferDirection::Outgoing
+                || transfer.status != TransferStatus::Offered
+                || transfer.peer != sender
+            {
+                return Err(TransferError::InvalidTransferState);
+            }
+
+            transfer.status = TransferStatus::Rejected;
+            Ok(())
+        }
+        FilePayload::Data {
+            transfer_id, data, ..
+        } => {
+            let filename = {
+                let mut transfers = transfer_store.transfers.write().await;
+                let transfer = transfers
+                    .get_mut(transfer_id)
+                    .ok_or(TransferError::TransferNotFound)?;
+
+                if transfer.direction != TransferDirection::Incoming
+                    || transfer.status != TransferStatus::Accepted
+                    || transfer.peer != sender
+                {
+                    return Err(TransferError::InvalidTransferState);
+                }
+
+                transfer.status = TransferStatus::Transferring;
+                transfer.meta.filename.clone()
+            };
+
+            let result = save_file(filename.as_str(), Path::new("downloads/"), data)
+                .await
+                .map_err(TransferError::IoFailed);
+
+            if let Some(transfer) = transfer_store.transfers.write().await.get_mut(transfer_id) {
+                transfer.status = match &result {
+                    Ok(()) => TransferStatus::Completed,
+                    Err(e) => TransferStatus::Failed(e.to_string()),
+                }
+            }
+
+            result
+        }
+    }
+}
+
+async fn save_file(file_name: &str, dir_path: &Path, data: &[u8]) -> Result<(), io::Error> {
     fs::create_dir_all(dir_path).await?;
 
     let safe_name = Path::new(file_name)
@@ -41,7 +140,7 @@ pub async fn save_file(file_name: &str, dir_path: &Path, data: &[u8]) -> Result<
     Ok(())
 }
 
-pub async fn send_pending_file(
+async fn send_pending_file(
     transfer_id: Uuid,
     transfer_store: &Store,
     identity: PeerInfo,
@@ -75,12 +174,13 @@ pub async fn send_pending_file(
 
     if let Some(transfer) = transfer_store.transfers.write().await.get_mut(&transfer_id) {
         transfer.status = match &result {
-            Ok(()) => TransferStatus::Completed,
+            Ok(()) => {
+                tracing::info!(transfer_id=%transfer_id, "file sent successfully");
+                TransferStatus::Completed
+            }
             Err(e) => TransferStatus::Failed(e.to_string()),
         }
     };
-
-    tracing::info!(transfer_id=%transfer_id, "file sent successfully");
     result
 }
 

@@ -1,23 +1,20 @@
-use std::net::Ipv4Addr;
-
 use super::types::{PeerEvent, PeerInfo, PeerPayload};
-use crate::transfer::types::{Message, Store, TransferDirection, TransferError};
+use crate::transfer::{
+    event::send_event,
+    types::{Message, Store, TransferDirection, TransferError},
+};
 use reqwest::Client;
 
-pub async fn send_event(
-    http: &Client,
-    ip: Ipv4Addr,
-    port: u16,
-    event: &PeerEvent,
-) -> Result<(), reqwest::Error> {
-    let url = format!("https://{}:{}/events", ip, port);
-
-    http.post(url)
-        .json(event)
-        .send()
-        .await?
-        .error_for_status()?;
-
+pub async fn handle_message_event(
+    message: &Message,
+    transfer_store: &Store,
+    sender: PeerInfo,
+) -> Result<(), TransferError> {
+    let mut messages = transfer_store.messages.write().await;
+    messages.entry(sender).or_default().push(Message {
+        content: message.content.clone(),
+        direction: TransferDirection::Incoming,
+    });
     Ok(())
 }
 

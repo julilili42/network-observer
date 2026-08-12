@@ -35,7 +35,6 @@ impl TofuVerifier {
 pub enum TlsError {
     FailedIO(io::Error),
     FailedCertGen(rcgen::Error),
-    FailedVerify(rustls::Error),
 }
 
 pub fn build_http_client(verifier: Arc<TofuVerifier>) -> reqwest::Client {
