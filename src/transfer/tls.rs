@@ -1,7 +1,3 @@
-use std::{fs, path::Path};
-
-use rcgen::{CertificateParams, DistinguishedName, KeyPair};
-
 use rustls::{
     DigitallySignedStruct, SignatureScheme,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
@@ -13,6 +9,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
+use tokio::io;
 
 pub struct TlsIdentity {
     pub cert: String,
@@ -34,40 +31,11 @@ impl TofuVerifier {
     }
 }
 
-const CERT_PATH: &str = "cert.pem";
-const KEY_PATH: &str = "key.pem";
-
-pub fn load_or_generate(device_name: &str) -> TlsIdentity {
-    if Path::new(CERT_PATH).exists() && Path::new(KEY_PATH).exists() {
-        tracing::info!("Loading existing TLS certificate");
-        return TlsIdentity {
-            cert: fs::read_to_string(CERT_PATH).expect("Failed to read cert"),
-            key: fs::read_to_string(KEY_PATH).expect("Failed to read key"),
-        };
-    };
-
-    tracing::info!("Generating new TLS cert for {}", device_name);
-
-    let key_pair = KeyPair::generate().expect("Failed to generate keypair");
-
-    let mut params = CertificateParams::default();
-    params.distinguished_name = DistinguishedName::new();
-    params
-        .distinguished_name
-        .push(rcgen::DnType::CommonName, device_name);
-
-    let cert = params.self_signed(&key_pair).expect("Failed to self-sign");
-
-    let cert_pem = cert.pem();
-    let key_pem = key_pair.serialize_pem();
-
-    fs::write(CERT_PATH, &cert_pem).expect("Failed to write cert");
-    fs::write(KEY_PATH, &key_pem).expect("Failed to write key");
-
-    TlsIdentity {
-        cert: cert_pem,
-        key: key_pem,
-    }
+#[derive(Debug)]
+pub enum TlsError {
+    FailedIO(io::Error),
+    FailedCertGen(rcgen::Error),
+    FailedVerify(rustls::Error),
 }
 
 pub fn build_http_client(verifier: Arc<TofuVerifier>) -> reqwest::Client {

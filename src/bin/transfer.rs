@@ -8,14 +8,15 @@ use axum_server::tls_rustls::RustlsConfig;
 use network_sniffer::{
     api::{
         transfer::{
-            get_messages, get_peers, handle_incoming, handle_outgoing_file_accept,
-            handle_outgoing_file_reject, handle_outgoing_message,
+            get_messages, get_peers, handle_accept_transfer, handle_peer_events,
+            handle_reject_transfer, handle_send_message,
         },
         types::{ApiEvent, TransferState},
         ws::ws_handler_transfer,
     },
     observer::interface::{find_pnet_interface, get_interface_ipv4},
     transfer::{
+        cert::load_or_generate,
         mdns::start_mdns,
         tls,
         types::{PeerInfo, Store},
@@ -36,10 +37,10 @@ fn build_transfer_app(state: TransferState) -> Router {
         .route("/", get(get_peers))
         .route("/ws", get(ws_handler_transfer))
         .route("/messages", get(get_messages))
-        .route("/incoming", post(handle_incoming))
-        .route("/outgoing_message", post(handle_outgoing_message))
-        .route("/outgoing_file_accept", post(handle_outgoing_file_accept))
-        .route("/outgoing_file_reject", post(handle_outgoing_file_reject))
+        .route("/events", post(handle_peer_events))
+        .route("/send_message", post(handle_send_message))
+        .route("/accept_transfer", post(handle_accept_transfer))
+        .route("/reject_transfer", post(handle_reject_transfer))
         .layer(cors)
         .with_state(state)
 }
@@ -97,7 +98,11 @@ async fn main() {
 
     let device_name = std::env::var("DEVICE_NAME").unwrap_or_else(|_| "Unknown".into());
 
-    let tls_identity = tls::load_or_generate(&device_name);
+    let cert_path: &str = "cert.pem";
+    let key_path: &str = "key.pem";
+
+    let tls_identity =
+        load_or_generate(&device_name, cert_path, key_path).expect("Certificate failure");
     tracing::info!("TLS identity ready");
 
     // first contact trusted blindly > saved for later contact > SSH model

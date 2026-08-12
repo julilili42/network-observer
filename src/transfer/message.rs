@@ -1,9 +1,8 @@
 use std::net::Ipv4Addr;
 
-use super::types::{FilePayload, PeerEvent, PeerInfo, PeerPayload};
-use crate::transfer::types::{Message, Store, TransferDirection, TransferError, TransferStatus};
+use super::types::{PeerEvent, PeerInfo, PeerPayload};
+use crate::transfer::types::{Message, Store, TransferDirection, TransferError};
 use reqwest::Client;
-use uuid::Uuid;
 
 pub async fn send_event(
     http: &Client,
@@ -11,7 +10,7 @@ pub async fn send_event(
     port: u16,
     event: &PeerEvent,
 ) -> Result<(), reqwest::Error> {
-    let url = format!("https://{}:{}/incoming", ip, port);
+    let url = format!("https://{}:{}/events", ip, port);
 
     http.post(url)
         .json(event)
@@ -20,49 +19,6 @@ pub async fn send_event(
         .error_for_status()?;
 
     Ok(())
-}
-
-pub async fn send_pending_file(
-    transfer_id: Uuid,
-    transfer_store: &Store,
-    identity: PeerInfo,
-    http: &Client,
-) -> Result<(), TransferError> {
-    let (ip, port, path) = {
-        let mut transfer_map = transfer_store.transfers.write().await;
-        let Some(transfer) = transfer_map.get_mut(&transfer_id) else {
-            return Err(TransferError::TransferNotFound);
-        };
-        transfer.status = TransferStatus::Transferring;
-        (transfer.peer.ip, transfer.peer.port, transfer.path.clone())
-    };
-
-    let result: Result<(), TransferError> = async {
-        let data = tokio::fs::read(path)
-            .await
-            .map_err(TransferError::IoFailed)?;
-
-        let event = PeerEvent {
-            from: identity.clone(),
-            payload: PeerPayload::File(FilePayload::Data { transfer_id, data }),
-        };
-
-        send_event(http, ip, port, &event)
-            .await
-            .map_err(TransferError::SendFail)?;
-        Ok(())
-    }
-    .await;
-
-    if let Some(transfer) = transfer_store.transfers.write().await.get_mut(&transfer_id) {
-        transfer.status = match &result {
-            Ok(()) => TransferStatus::Completed,
-            Err(e) => TransferStatus::Failed(e.to_string()),
-        }
-    };
-
-    tracing::info!(transfer_id=%transfer_id, "file sent successfully");
-    result
 }
 
 pub async fn send_message(

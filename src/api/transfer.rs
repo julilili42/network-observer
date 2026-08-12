@@ -24,7 +24,7 @@ pub async fn get_messages(
     Json(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
 }
 
-pub async fn handle_outgoing_file_accept(
+pub async fn handle_accept_transfer(
     State(state): State<TransferState>,
     Json(req): Json<AcceptRejectRequest>,
 ) -> StatusCode {
@@ -34,7 +34,7 @@ pub async fn handle_outgoing_file_accept(
     }
 }
 
-pub async fn handle_outgoing_file_reject(
+pub async fn handle_reject_transfer(
     State(state): State<TransferState>,
     Json(req): Json<AcceptRejectRequest>,
 ) -> StatusCode {
@@ -44,7 +44,7 @@ pub async fn handle_outgoing_file_reject(
     }
 }
 
-pub async fn handle_outgoing_message(
+pub async fn handle_send_message(
     State(state): State<TransferState>,
     Json(req): Json<SendMessageRequest>,
 ) -> StatusCode {
@@ -62,7 +62,7 @@ pub async fn handle_outgoing_message(
     }
 }
 
-pub async fn handle_incoming(
+pub async fn handle_peer_events(
     State(state): State<TransferState>,
     Json(event): Json<PeerEvent>,
 ) -> StatusCode {

@@ -1,3 +1,4 @@
+pub mod cert;
 pub mod file;
 pub mod mdns;
 pub mod message;

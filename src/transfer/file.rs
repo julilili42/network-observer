@@ -1,6 +1,11 @@
-use std::path::PathBuf;
+use std::{
+    io,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 
 use reqwest::Client;
+use tokio::{fs, fs::OpenOptions, io::AsyncWriteExt};
 use uuid::Uuid;
 
 use crate::transfer::{
@@ -11,9 +16,72 @@ use crate::transfer::{
     },
 };
 
-pub async fn find_peer_by_name(transfer_store: &Store, recipient_name: &str) -> Option<PeerInfo> {
-    let peers = transfer_store.peers.read().await;
-    peers.values().find(|p| p.name == recipient_name).cloned()
+pub async fn save_file(file_name: &str, dir_path: &Path, data: &[u8]) -> Result<(), io::Error> {
+    fs::create_dir_all(dir_path).await?;
+
+    let safe_name = Path::new(file_name)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or(io::Error::new(
+            ErrorKind::InvalidFilename,
+            "invalid filename",
+        ))?;
+
+    let path = dir_path.join(safe_name);
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .await?;
+
+    file.write_all(data).await?;
+    tracing::info!(file_name = %file_name, "File saved to {:?}", dir_path);
+
+    Ok(())
+}
+
+pub async fn send_pending_file(
+    transfer_id: Uuid,
+    transfer_store: &Store,
+    identity: PeerInfo,
+    http: &Client,
+) -> Result<(), TransferError> {
+    let (ip, port, path) = {
+        let mut transfer_map = transfer_store.transfers.write().await;
+        let Some(transfer) = transfer_map.get_mut(&transfer_id) else {
+            return Err(TransferError::TransferNotFound);
+        };
+        transfer.status = TransferStatus::Transferring;
+        (transfer.peer.ip, transfer.peer.port, transfer.path.clone())
+    };
+
+    let result: Result<(), TransferError> = async {
+        let data = tokio::fs::read(path)
+            .await
+            .map_err(TransferError::IoFailed)?;
+
+        let event = PeerEvent {
+            from: identity.clone(),
+            payload: PeerPayload::File(FilePayload::Data { transfer_id, data }),
+        };
+
+        send_event(http, ip, port, &event)
+            .await
+            .map_err(TransferError::SendFail)?;
+        Ok(())
+    }
+    .await;
+
+    if let Some(transfer) = transfer_store.transfers.write().await.get_mut(&transfer_id) {
+        transfer.status = match &result {
+            Ok(()) => TransferStatus::Completed,
+            Err(e) => TransferStatus::Failed(e.to_string()),
+        }
+    };
+
+    tracing::info!(transfer_id=%transfer_id, "file sent successfully");
+    result
 }
 
 pub async fn offer_transfer(
@@ -92,11 +160,9 @@ pub async fn reject_transfer(
         (transfer.peer.ip, transfer.peer.port)
     };
 
-    let payload = PeerPayload::File(FilePayload::Reject { transfer_id });
-
     let event = PeerEvent {
         from: identity.clone(),
-        payload,
+        payload: PeerPayload::File(FilePayload::Reject { transfer_id }),
     };
 
     if let Err(e) = send_event(http, ip, port, &event).await {
@@ -129,11 +195,9 @@ pub async fn accept_transfer(
         (transfer.peer.ip, transfer.peer.port)
     };
 
-    let payload = PeerPayload::File(FilePayload::Accept { transfer_id });
-
     let event = PeerEvent {
         from: identity.clone(),
-        payload,
+        payload: PeerPayload::File(FilePayload::Accept { transfer_id }),
     };
 
     if let Err(e) = send_event(http, ip, port, &event).await {
